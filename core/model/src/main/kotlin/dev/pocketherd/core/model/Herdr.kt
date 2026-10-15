@@ -2,6 +2,7 @@ package dev.pocketherd.core.model
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import java.time.Instant
 
 /**
  * Domain types for herdr protocol 22.
@@ -54,6 +55,12 @@ data class Pane(
     val focused: Boolean = false,
     val revision: Long = 0,
     val tokens: Long? = null,
+    /**
+     * Forward compatibility. herdr 0.9.0 does not send this; when a future version does it
+     * becomes the authoritative status timestamp and the client stops inferring one.
+     * Additive, so an older server simply leaves it null.
+     */
+    @SerialName("status_changed_at") val statusChangedAt: String? = null,
 ) {
     /** An agent pane is one herdr has detected a coding agent in; the rest are plain shells. */
     val isAgent: Boolean get() = agent != null
@@ -142,4 +149,60 @@ data class AgentEntry(
     val machineLabel: String,
     val pane: Pane,
     val workspace: Workspace?,
+    /** When the current status began. Null until the client has anything to go on. */
+    val statusSince: Instant? = null,
+    /**
+     * False when the start time was inferred rather than observed, which happens for
+     * anything already in progress when the app connected. The UI renders those with a
+     * "≥" so a two-minute-old connection cannot claim an agent has been blocked two
+     * minutes when it may have been hours.
+     */
+    val statusSinceExact: Boolean = false,
+    /** Finished or blocked since the user last looked, and not yet opened. */
+    val unread: Boolean = false,
+    /** Parsed from the pane's detection text. Only meaningful while [AgentStatus.Blocked]. */
+    val prompt: PromptKind? = null,
+) {
+    val key: String get() = "$machineId:${pane.paneId}"
+}
+
+/**
+ * What a blocked agent is asking for.
+ *
+ * Lives in :core:model rather than :domain because [AgentEntry] carries it and the
+ * dependency only runs one way. The parser that produces it lives in :domain.
+ */
+sealed interface PromptKind {
+    data class Menu(
+        val question: String,
+        val options: List<PromptOption>,
+        val flavor: PromptFlavor,
+    ) : PromptKind
+
+    data class YesNo(val question: String, val defaultYes: Boolean) : PromptKind
+    data class FreeText(val question: String?) : PromptKind
+    data object Unrecognised : PromptKind
+
+    /** Short label for the agent list and the pane header. */
+    val label: String
+        get() = when (this) {
+            is Menu -> when (flavor) {
+                PromptFlavor.Permission -> "Permission"
+                PromptFlavor.Plan -> "Plan approval"
+                PromptFlavor.Edit -> "Edit approval"
+            }
+            is YesNo -> "Yes / no"
+            is FreeText -> "Question"
+            Unrecognised -> "Waiting"
+        }
+}
+
+data class PromptOption(
+    /** The key actually sent. Never send the label; it is shortened for display. */
+    val key: String,
+    val label: String,
+    /** True for "No, and tell Claude…" style options that expect prose afterwards. */
+    val thenCompose: Boolean,
 )
+
+enum class PromptFlavor { Permission, Plan, Edit }

@@ -4,6 +4,7 @@ import dev.pocketherd.core.model.AgentEntry
 import dev.pocketherd.core.model.Machine
 import dev.pocketherd.core.model.PaneRead
 import kotlinx.coroutines.flow.Flow
+import java.time.Instant
 
 /** Saved SSH machines. Credentials never live here; see the keystore notes in :core:ssh. */
 interface MachineRepository {
@@ -43,6 +44,16 @@ interface HerdrRepository {
      * user never saw.
      */
     suspend fun approveHostKey(machineId: Long, fingerprint: String)
+
+    /** Clears the unread flag for one agent, e.g. when its pane is opened. */
+    suspend fun markSeen(machineId: Long, paneId: String)
+
+    suspend fun markAllSeen()
+
+    /** When the agent list was last on screen, used for "since you looked at HH:mm". */
+    val lastSeenAt: Flow<Instant?>
+
+    suspend fun recordLookedAt(at: Instant)
 }
 
 sealed interface ConnectionState {

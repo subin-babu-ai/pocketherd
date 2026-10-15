@@ -27,7 +27,7 @@ fun PocketHerdNavHost() {
                 onOpenPane = { machineId, paneId ->
                     navController.navigate(Routes.pane(machineId, paneId))
                 },
-                onAddMachine = { navController.navigate(Routes.MACHINES) },
+                onOpenMachines = { navController.navigate(Routes.MACHINES) },
             )
         }
 

@@ -1,6 +1,7 @@
 package dev.pocketherd.data
 
 import dev.pocketherd.core.model.Machine
+import dev.pocketherd.core.model.AgentStatus
 import dev.pocketherd.core.model.Pane
 import dev.pocketherd.core.model.PaneRead
 import dev.pocketherd.core.model.Workspace
@@ -24,6 +25,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.Job
+import java.time.Instant
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
@@ -54,6 +56,13 @@ class MachineSession(
 
     private var client: HerdrClient? = null
 
+    /** Loaded once before the first connect; see [bootstrapMeta]. */
+    private var storedRecords: Map<String, AgentMemoryStore.Record> = emptyMap()
+
+    fun seedMemory(records: Map<String, AgentMemoryStore.Record>) {
+        storedRecords = records
+    }
+
     /**
      * Wakes a session parked on a host key prompt. Conflated: tapping Trust twice is one
      * reconnect, and a signal sent before the session parks is not lost.
@@ -79,6 +88,14 @@ class MachineSession(
         retrySignal.trySend(Unit)
     }
 
+    fun markSeen(paneId: String) {
+        _state.value = _state.value.markSeen(paneId)
+    }
+
+    fun markAllSeen() {
+        _state.value = _state.value.markAllSeen()
+    }
+
     /**
      * Reconnects with capped exponential backoff, 1s doubling to 30s. The cap matters more
      * than the curve: a phone that wakes in a tunnel should not hammer SSH, but it also
@@ -101,9 +118,11 @@ class MachineSession(
 
                 val snapshot: Snapshot =
                     HerdrCodec.decodeResultField(c.call(Methods.SESSION_SNAPSHOT), "snapshot")
+                val connectedAt = Instant.now()
                 _state.value = SessionState(
                     panes = snapshot.panes.associateBy { it.paneId },
                     workspaces = snapshot.workspaces.associateBy { it.workspaceId },
+                    meta = bootstrapMeta(snapshot.panes, connectedAt),
                 )
                 Log.i(
                     TAG,
@@ -164,6 +183,43 @@ class MachineSession(
             backoffMs = (backoffMs * 2).coerceAtMost(30_000L)
         }
     }
+
+    /**
+     * Establishes status timing for panes present at connect.
+     *
+     * Three cases. A stored record whose status still matches is trusted outright, which is
+     * what lets an age survive a restart. A stored record that disagrees means the status
+     * changed while the app was not watching, so the change is dated to the connection and
+     * marked inexact. A pane with no record at all gets the same treatment.
+     *
+     * Anything already Done before the first connect starts as seen rather than unread; a
+     * fresh install should not open with twelve notifications about work that finished last
+     * week.
+     */
+    private fun bootstrapMeta(panes: List<Pane>, connectedAt: Instant): Map<String, PaneMeta> =
+        panes.associate { pane ->
+            val stored = storedRecords[AgentMemoryStore.key(machine.id, pane.paneId)]
+            val meta = when {
+                stored != null && AgentMemoryStore.statusOf(stored) == pane.agentStatus ->
+                    PaneMeta(
+                        statusSince = Instant.ofEpochMilli(stored.sinceEpochMs),
+                        exact = stored.exact,
+                        unread = !stored.seen &&
+                            (pane.agentStatus == AgentStatus.Done ||
+                                pane.agentStatus == AgentStatus.Blocked),
+                    )
+
+                else -> PaneMeta(
+                    statusSince = connectedAt,
+                    exact = false,
+                    // A status we never saw arrive is not news on a first connect.
+                    unread = stored != null &&
+                        (pane.agentStatus == AgentStatus.Done ||
+                            pane.agentStatus == AgentStatus.Blocked),
+                )
+            }
+            pane.paneId to meta
+        }
 
     /**
      * Follows the event stream until it ends or a pane appears that the current

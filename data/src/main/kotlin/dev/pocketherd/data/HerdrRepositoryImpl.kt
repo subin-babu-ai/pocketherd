@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import java.time.Instant
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
@@ -85,6 +87,7 @@ class MachineRepositoryImpl @Inject constructor(
 class HerdrRepositoryImpl @Inject constructor(
     private val machines: MachineRepository,
     private val connector: SshConnector,
+    private val memory: AgentMemoryStore,
     private val io: CoroutineDispatcher,
 ) : HerdrRepository {
 
@@ -113,8 +116,12 @@ class HerdrRepositoryImpl @Inject constructor(
                 scope = scope,
                 connect = { connector.connect(it) },
             ).also {
+                it.seedMemory(memory.records())
                 it.start()
                 sessions[machineId] = machine to it
+                // Persist whatever the session learns, so ages and unread survive a
+                // restart instead of every agent looking newly changed.
+                scope.launch { persistOnChange(machineId, machine, it) }
             }
         }
     }
@@ -123,15 +130,57 @@ class HerdrRepositoryImpl @Inject constructor(
         flowOfSession(machineId) { machine, session ->
             session.state.map { state ->
                 state.panes.values.map { pane ->
+                    val meta = state.meta[pane.paneId]
                     AgentEntry(
                         machineId = machine.id,
                         machineLabel = machine.label,
                         pane = pane,
                         workspace = pane.workspaceId?.let(state.workspaces::get),
+                        // An upstream timestamp, once herdr sends one, beats anything the
+                        // client inferred.
+                        statusSince = pane.statusChangedAt?.let(::parseInstant)
+                            ?: meta?.statusSince,
+                        statusSinceExact = pane.statusChangedAt != null || meta?.exact == true,
+                        unread = meta?.unread == true,
                     )
                 }
             }
         }
+
+    private fun parseInstant(raw: String): Instant? =
+        runCatching { Instant.parse(raw) }.getOrNull()
+
+    private suspend fun persistOnChange(
+        machineId: Long,
+        machine: Machine,
+        session: MachineSession,
+    ) {
+        session.state.collect { state ->
+            memory.put(
+                state.panes.values.associate { pane ->
+                    val meta = state.meta[pane.paneId]
+                    AgentMemoryStore.key(machineId, pane.paneId) to AgentMemoryStore.Record(
+                        status = pane.agentStatus.name,
+                        sinceEpochMs = (meta?.statusSince ?: Instant.now()).toEpochMilli(),
+                        exact = meta?.exact == true,
+                        seen = meta?.unread != true,
+                    )
+                },
+            )
+        }
+    }
+
+    override suspend fun markSeen(machineId: Long, paneId: String) {
+        sessions[machineId]?.second?.markSeen(paneId)
+    }
+
+    override suspend fun markAllSeen() {
+        sessions.values.forEach { (_, session) -> session.markAllSeen() }
+    }
+
+    override val lastSeenAt: Flow<Instant?> get() = memory.lastSeenAt
+
+    override suspend fun recordLookedAt(at: Instant) = memory.setLastSeenAt(at)
 
     override fun observeConnection(machineId: Long): Flow<ConnectionState> =
         flowOfSession(machineId) { _, session -> session.connection }

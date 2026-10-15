@@ -38,18 +38,3 @@ fun PocketHerdTheme(
     }
     MaterialTheme(colorScheme = colors, content = content)
 }
-
-/**
- * Colours for the four agent states.
- *
- * Blocked is the only one that gets a saturated red, because it is the only one that means
- * the user has to do something. Status is never signalled by colour alone; every call site
- * pairs these with a text label so the list stays readable without colour vision.
- */
-object StatusColors {
-    val Blocked = Color(0xFFFF7B72)
-    val Working = Color(0xFFD29922)
-    val Done = Color(0xFF3FB950)
-    val Idle = Color(0xFF6E7681)
-    val Unknown = Color(0xFF484F58)
-}

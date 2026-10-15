@@ -1,9 +1,19 @@
 package dev.pocketherd.data
 
+import dev.pocketherd.core.model.AgentStatus
 import dev.pocketherd.core.model.Pane
 import dev.pocketherd.core.model.Workspace
 import dev.pocketherd.core.protocol.EventTypes
 import dev.pocketherd.core.protocol.HerdrEventEnvelope
+import java.time.Instant
+
+/** Status timing for one pane. See [SessionState.reduce] for how it is established. */
+data class PaneMeta(
+    val statusSince: Instant,
+    /** False when inferred from connect time rather than observed. */
+    val exact: Boolean,
+    val unread: Boolean,
+)
 
 /**
  * The client-side mirror of one machine's herdr session.
@@ -15,12 +25,14 @@ import dev.pocketherd.core.protocol.HerdrEventEnvelope
 data class SessionState(
     val panes: Map<String, Pane> = emptyMap(),
     val workspaces: Map<String, Workspace> = emptyMap(),
+    /** Per-pane status timing and unread, keyed by pane id. */
+    val meta: Map<String, PaneMeta> = emptyMap(),
 ) {
     /**
      * Applies one event. Unknown event types return `this` unchanged, which is what keeps a
      * newer herdr from breaking an older client.
      */
-    fun reduce(envelope: HerdrEventEnvelope): SessionState {
+    fun reduce(envelope: HerdrEventEnvelope, now: Instant = Instant.now()): SessionState {
         val data = envelope.data
         return when (data.type) {
             EventTypes.PANE_CREATED,
@@ -36,12 +48,22 @@ data class SessionState(
                 val id = data.paneId ?: return this
                 val status = data.agentStatus ?: return this
                 val existing = panes[id] ?: Pane(paneId = id, workspaceId = data.workspaceId)
+                if (existing.agentStatus == status && meta.containsKey(id)) return this
+
                 copy(
                     panes = panes + (id to existing.copy(
                         agentStatus = status,
                         agent = data.agent ?: existing.agent,
                         displayAgent = data.displayAgent ?: existing.displayAgent,
                         title = data.title ?: existing.title,
+                    )),
+                    // Observed first-hand, so the timestamp is exact. Done and Blocked are
+                    // the two states worth telling the user about after the fact; Working
+                    // and Idle are not news.
+                    meta = meta + (id to PaneMeta(
+                        statusSince = now,
+                        exact = true,
+                        unread = status == AgentStatus.Done || status == AgentStatus.Blocked,
                     )),
                 )
             }
@@ -69,6 +91,16 @@ data class SessionState(
             else -> this
         }
     }
+
+    /** Drops the unread flag, e.g. once the user opens or dismisses the row. */
+    fun markSeen(paneId: String): SessionState {
+        val existing = meta[paneId] ?: return this
+        if (!existing.unread) return this
+        return copy(meta = meta + (paneId to existing.copy(unread = false)))
+    }
+
+    fun markAllSeen(): SessionState =
+        copy(meta = meta.mapValues { (_, m) -> m.copy(unread = false) })
 
     /**
      * True when the event introduced a pane the current subscription does not cover.

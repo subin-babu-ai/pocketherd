@@ -24,6 +24,8 @@ import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.TaskAlt
+import androidx.compose.material.icons.outlined.Bedtime
+import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -144,12 +146,11 @@ private fun TriageList(
 
         if (triage.new.isNotEmpty()) {
             item(key = "new-header") {
-                SectionHeader(
+                NewSectionHeader(
                     title = state.lastSeenAt
                         ?.let { "New since ${HH_MM.format(it)} · ${triage.new.size}" }
                         ?: "New · ${triage.new.size}",
-                    emphasised = true,
-                    action = "Mark all seen" to viewModel::markAllSeen,
+                    onMarkAllSeen = viewModel::markAllSeen,
                 )
             }
             items(triage.new, key = { it.key }) { entry ->
@@ -157,6 +158,7 @@ private fun TriageList(
                     entry = entry,
                     now = now,
                     titleWeight = FontWeight.SemiBold,
+                    titleLines = 2,
                     showMachine = state.machineFilter == null,
                     trailing = {
                         IconButton(onClick = { viewModel.markSeen(entry) }) {
@@ -187,9 +189,11 @@ private fun TriageList(
             item(key = "quiet-header") {
                 CollapsibleHeader(
                     title = "Quiet · ${triage.quiet.size}",
+                    icon = Icons.Outlined.Bedtime,
                     detail = "${triage.quietDoneCount} done and seen, ${triage.quietIdleCount} idle",
                     expanded = quietExpanded,
                     onToggle = { quietExpanded = !quietExpanded },
+                    topDivider = true,
                 )
             }
             if (quietExpanded) {
@@ -203,6 +207,7 @@ private fun TriageList(
             item(key = "shells-header") {
                 CollapsibleHeader(
                     title = "Shells · ${triage.shells.size}",
+                    icon = Icons.Outlined.Terminal,
                     expanded = shellsExpanded,
                     onToggle = { shellsExpanded = !shellsExpanded },
                 )

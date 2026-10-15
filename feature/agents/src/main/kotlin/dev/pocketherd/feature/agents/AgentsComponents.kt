@@ -28,7 +28,9 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -43,6 +45,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -164,72 +167,91 @@ private fun SummarySubline(state: AgentsUiState) {
     }
 }
 
+/** Plain section label, as used by Working. */
 @Composable
-fun SectionHeader(
-    title: String,
-    emphasised: Boolean = false,
-    action: Pair<String, () -> Unit>? = null,
-) {
-    Row(
-        Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 16.dp, bottom = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            title,
-            style = MaterialTheme.typography.titleSmall,
-            color = if (emphasised) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
-            modifier = Modifier.weight(1f),
-        )
-        action?.let { (label, onClick) ->
-            TextButton(onClick = onClick) { Text(label) }
-        }
-    }
+fun SectionHeader(title: String) {
+    Text(
+        title,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 4.dp),
+    )
 }
 
+/** New carries the primary colour and the bulk action, so it gets its own shape. */
 @Composable
-fun CollapsibleHeader(
-    title: String,
-    expanded: Boolean,
-    onToggle: () -> Unit,
-    detail: String? = null,
-) {
+fun NewSectionHeader(title: String, onMarkAllSeen: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
-            .clickable(onClick = onToggle)
-            .heightIn(min = 56.dp)
-            .padding(start = 20.dp, end = 12.dp),
+            .heightIn(min = 48.dp)
+            .padding(start = 20.dp, end = 8.dp, top = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Text(
             title,
             style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = MaterialTheme.colorScheme.primary,
         )
-        Spacer()
-        detail?.let {
-            Text(
-                it,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.outline,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        Icon(
-            if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-            contentDescription = null,
-        )
+        TextButton(onClick = onMarkAllSeen) { Text("Mark all seen") }
     }
 }
 
+/**
+ * Quiet and Shells. Both carry a leading icon so the two collapsed groups are
+ * distinguishable at a glance without reading their labels.
+ */
 @Composable
-private fun androidx.compose.foundation.layout.RowScope.Spacer() {
-    Box(Modifier.weight(1f))
+fun CollapsibleHeader(
+    title: String,
+    icon: ImageVector,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    detail: String? = null,
+    topDivider: Boolean = false,
+) {
+    Column(Modifier.fillMaxWidth().padding(top = if (topDivider) 8.dp else 0.dp)) {
+        // Separates the quiet half of the list from the part that still matters.
+        if (topDivider) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onToggle)
+                .heightIn(min = 56.dp)
+                .padding(start = 20.dp, end = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.outline,
+                modifier = Modifier.size(22.dp),
+            )
+            Column(Modifier.weight(1f)) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                detail?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            Icon(
+                if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
 }
 
 /**
@@ -246,6 +268,8 @@ fun AgentRow(
     showMachine: Boolean,
     modifier: Modifier = Modifier,
     titleWeight: FontWeight = FontWeight.Normal,
+    /** New wraps to two lines; Working truncates to one. */
+    titleLines: Int = 1,
     trailing: (@Composable () -> Unit)? = null,
     onClick: () -> Unit,
 ) {
@@ -260,8 +284,8 @@ fun AgentRow(
         modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .heightIn(min = 64.dp)
-            .padding(horizontal = 20.dp, vertical = 8.dp)
+            .heightIn(min = if (titleLines > 1) 64.dp else 56.dp)
+            .padding(start = 20.dp, end = if (trailing != null) 4.dp else 20.dp, top = 6.dp, bottom = 6.dp)
             .clearAndSetSemantics {
                 contentDescription =
                     "${entry.pane.agentStatus.label()} $spokenAge, " +
@@ -276,12 +300,13 @@ fun AgentRow(
                 entry.pane.displayName,
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = titleWeight,
-                maxLines = 2,
+                maxLines = titleLines,
                 overflow = TextOverflow.Ellipsis,
             )
             if (meta.isNotBlank()) {
                 Text(
                     meta.trimEnd(',', ' '),
+                    modifier = Modifier.padding(top = 2.dp),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -292,7 +317,10 @@ fun AgentRow(
         minutes?.let {
             Text(
                 formatAgeDisplay(it, entry.statusSinceExact),
-                style = MaterialTheme.typography.labelMedium,
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontFeatureSettings = "tnum",
+                ),
+                fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }

@@ -1,0 +1,8 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- A terminal prompt: the chevron and cursor of a pane waiting on you. -->
+    <path android:fillColor="#79C0FF"
+        android:pathData="M36,40 L50,54 L36,68 L41,73 L60,54 L41,35 Z" />
+    <path android:fillColor="#E6EDF3" android:pathData="M58,66 H74 V73 H58 Z" />
+</vector>

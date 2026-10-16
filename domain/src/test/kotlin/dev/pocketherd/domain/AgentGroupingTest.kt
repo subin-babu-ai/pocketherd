@@ -21,7 +21,7 @@ class AgentGroupingTest {
         machineId: Long = 1,
         machine: String = "desktop",
         workspaceId: String = "w1",
-        space: String = "r2ms-bugs",
+        space: String = "api-bugs",
         worktree: String? = null,
         tabNumber: Int? = 1,
         tabLabel: String? = "planner",

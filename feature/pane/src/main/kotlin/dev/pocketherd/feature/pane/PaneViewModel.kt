@@ -263,7 +263,7 @@ class PaneViewModel @AssistedInject constructor(
  */
 private const val POLL_INTERVAL_MS = 2_000L
 
-/** "Permission · macbook · gerrit-sanctum › solver · ⎇ sanctum@wta-fix" */
+/** "Permission · macbook · api-bugs › solver · ⎇ fix-branch" */
 internal fun AgentEntry.paneMeta(): String = buildString {
     if (pane.agentStatus == AgentStatus.Blocked) {
         prompt?.label?.let { append("$it · ") }

@@ -557,7 +557,7 @@ fun HostKeyDialog(
     )
 }
 
-/** "desktop · r2ms-bugs › planner", dropping any part that is missing. */
+/** "desktop · api-bugs › planner", dropping any part that is missing. */
 fun AgentEntry.rowMeta(showMachine: Boolean = true): String = buildString {
     if (showMachine) append(machineLabel)
     workspace?.displayName?.let {

@@ -26,7 +26,7 @@ class PromptParserTest {
           Do you want to proceed?
           ❯ 1. Yes
             2. Yes, and don't ask again for python3 commands
-               in ~/gerrit/sanctum
+               in ~/work/project
             3. No, and tell Claude what to do differently (esc)
     """.trimIndent()
 
@@ -64,7 +64,7 @@ class PromptParserTest {
     """.trimIndent()
 
     private val yesNo = """
-        $ repo sync -j8 sdv/applied
+        $ repo sync -j8 acme/platform
         Fetching: 100% (214/214), done in 41.2s
 
         ⏺ Bash(git log --oneline origin/main..HEAD)
@@ -96,9 +96,9 @@ class PromptParserTest {
     @Test
     fun `a wrapped option is folded into one, and its path is shortened`() {
         val kind = PromptParser.parse(permission) as PromptKind.Menu
-        // "in ~/gerrit/sanctum" was on its own line and is not worth a phone line.
+        // "in ~/work/project" was on its own line and is not worth a phone line.
         assertEquals("Yes, don't ask again for python3 commands here", kind.options[1].label)
-        assertFalse(kind.options[1].label.contains("gerrit"))
+        assertFalse(kind.options[1].label.contains("project"))
     }
 
     @Test

@@ -64,7 +64,7 @@ object PromptParser {
      * Collects numbered options, folding wrapped continuation lines into the option above.
      *
      * Agents wrap long options at the terminal width, so "2. Yes, and don't ask again for
-     * python3 commands" followed by "   in ~/gerrit/sanctum" is one option, not two.
+     * python3 commands" followed by "   in ~/work/project" is one option, not two.
      */
     private fun parseOptions(lines: List<String>, from: Int): List<PromptOption> {
         val keys = mutableListOf<String>()

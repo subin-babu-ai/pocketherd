@@ -254,11 +254,11 @@ class MachineSession(
         }
     }
 
-    suspend fun readPane(paneId: String, ansi: Boolean): PaneRead {
+    suspend fun readPane(paneId: String, ansi: Boolean, source: String = "visible"): PaneRead {
         val c = client ?: error("not connected to ${machine.label}")
         val params = buildJsonObject {
             put("pane_id", paneId)
-            put("source", "visible")
+            put("source", source)
             put("format", if (ansi) "ansi" else "text")
             put("strip_ansi", !ansi)
         }
@@ -272,6 +272,19 @@ class MachineSession(
             put("text", text)
         }
         HerdrCodec.resultOrThrow(c.call(Methods.PANE_SEND_TEXT, params))
+    }
+
+    /**
+     * Answers a prompt via `agent.prompt`, which targets the agent rather than typing into
+     * its terminal. `target` is the pane id; the method takes `target`, not `pane_id`.
+     */
+    suspend fun promptAgent(paneId: String, text: String) {
+        val c = client ?: error("not connected to ${machine.label}")
+        val params = buildJsonObject {
+            put("target", paneId)
+            put("text", text)
+        }
+        HerdrCodec.resultOrThrow(c.call(Methods.AGENT_PROMPT, params))
     }
 
     suspend fun sendKeys(paneId: String, keys: String) {

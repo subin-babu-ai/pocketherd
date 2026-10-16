@@ -191,8 +191,15 @@ class HerdrRepositoryImpl @Inject constructor(
             session.revisions.filter { it.first == paneId }.map { it.second }
         }
 
-    override suspend fun readPane(machineId: Long, paneId: String, ansi: Boolean): PaneRead =
-        session(machineId).readPane(paneId, ansi)
+    override suspend fun readPane(
+        machineId: Long,
+        paneId: String,
+        ansi: Boolean,
+        source: String,
+    ): PaneRead = session(machineId).readPane(paneId, ansi, source)
+
+    override suspend fun promptAgent(machineId: Long, paneId: String, text: String) =
+        session(machineId).promptAgent(paneId, text)
 
     override suspend fun sendText(machineId: Long, paneId: String, text: String) =
         session(machineId).sendText(paneId, text)

@@ -42,7 +42,16 @@ fun PocketHerdNavHost() {
                 navArgument("paneId") { type = NavType.StringType },
             ),
         ) { entry ->
-            PaneScreen(onBack = navController::popBackStack)
+            PaneScreen(
+                onBack = navController::popBackStack,
+                // Replace rather than stack: walking five blocked agents should not leave
+                // five panes on the back stack to press back through.
+                onOpenPane = { machineId, paneId ->
+                    navController.navigate(Routes.pane(machineId, paneId)) {
+                        popUpTo(Routes.AGENTS)
+                    }
+                },
+            )
         }
     }
 }

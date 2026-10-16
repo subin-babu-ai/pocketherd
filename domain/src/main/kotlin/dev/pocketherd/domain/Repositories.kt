@@ -29,14 +29,27 @@ interface HerdrRepository {
     fun observeAgents(machineId: Long): Flow<List<AgentEntry>>
     fun observeConnection(machineId: Long): Flow<ConnectionState>
 
-    /** Reads the rendered screen of a pane. [ansi] keeps SGR colour escapes in the text. */
-    suspend fun readPane(machineId: Long, paneId: String, ansi: Boolean = true): PaneRead
+    /**
+     * Reads a pane. [ansi] keeps SGR colour escapes.
+     *
+     * [source] is herdr's read source: "visible" for what is on screen, "detection" for the
+     * slice herdr uses to spot a prompt, which is what the parser wants.
+     */
+    suspend fun readPane(
+        machineId: Long,
+        paneId: String,
+        ansi: Boolean = true,
+        source: String = "visible",
+    ): PaneRead
 
     /** Emits each time herdr reports new output for this pane, carrying the new revision. */
     fun observePaneRevision(machineId: Long, paneId: String): Flow<Long>
 
     suspend fun sendText(machineId: Long, paneId: String, text: String)
     suspend fun sendKeys(machineId: Long, paneId: String, keys: String)
+
+    /** Sends a prompt answer through `agent.prompt`, which waits for the agent to take it. */
+    suspend fun promptAgent(machineId: Long, paneId: String, text: String)
 
     /**
      * Approves the host key a machine is currently blocked on and reconnects it.

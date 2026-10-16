@@ -23,6 +23,24 @@ import kotlinx.serialization.Serializable
 data class Subscription(
     val type: String,
     @SerialName("pane_id") val paneId: String? = null,
+    val source: String? = null,
+    val match: OutputMatch? = null,
+)
+
+@Serializable
+data class OutputMatch(val type: String, val value: String) {
+    companion object {
+        /** Matches any output at all, which is how you subscribe to "it changed". */
+        fun any() = OutputMatch(type = "regex", value = ".")
+    }
+}
+
+/** Subscribes to every output change on one pane. */
+fun outputSubscription(paneId: String) = Subscription(
+    type = EventFilters.PANE_OUTPUT_MATCHED,
+    paneId = paneId,
+    source = "visible",
+    match = OutputMatch.any(),
 )
 
 /** Dotted names, used only when subscribing. */
@@ -41,6 +59,14 @@ object EventFilters {
 
     /** Requires a pane_id. */
     const val PANE_AGENT_STATUS_CHANGED = "pane.agent_status_changed"
+
+    /**
+     * Requires pane_id, source and match. The only way to be told about pane output:
+     * `pane.output_changed` exists as a delivered event type but has no subscription
+     * filter, so nothing ever produces one. A catch-all regex turns this into "any
+     * output", which is the stream this app wants.
+     */
+    const val PANE_OUTPUT_MATCHED = "pane.output_matched"
 
     /** Accepted with no extra fields, so one entry each covers every pane. */
     val GLOBAL = listOf(
@@ -72,6 +98,7 @@ object EventTypes {
     const val PANE_AGENT_DETECTED = "pane_agent_detected"
     const val PANE_AGENT_STATUS_CHANGED = "pane_agent_status_changed"
     const val PANE_OUTPUT_CHANGED = "pane_output_changed"
+    const val PANE_OUTPUT_MATCHED = "pane_output_matched"
     const val WORKSPACE_CREATED = "workspace_created"
     const val WORKSPACE_UPDATED = "workspace_updated"
     const val WORKSPACE_CLOSED = "workspace_closed"

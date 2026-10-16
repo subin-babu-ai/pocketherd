@@ -18,6 +18,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.time.Instant
 
@@ -125,11 +127,20 @@ class PaneViewModel @AssistedInject constructor(
                 }
         }
 
-        refresh()
-        // herdr pushes a revision on every output change; re-read only when it moves,
-        // rather than polling the pane on a timer.
+        // Polled, because herdr offers no way to be told that a pane changed.
+        //
+        // `pane.output_changed` is a delivered event type with no subscription filter, so
+        // it can never arrive. `pane.output_matched` fires once at subscribe time against
+        // existing content and never again. `pane.wait_for_output` does block, but only
+        // until its pattern matches, and a catch-all pattern matches what is already on
+        // screen, so it returns instantly. `pane.read` reports revision 0 every time, so
+        // that is no use for change detection either. All four were tried against herdr
+        // 0.9.0 before settling on this.
         viewModelScope.launch {
-            herdr.observePaneRevision(machineId, paneId).collect { refresh() }
+            while (isActive) {
+                refresh()
+                delay(POLL_INTERVAL_MS)
+            }
         }
     }
 
@@ -137,6 +148,13 @@ class PaneViewModel @AssistedInject constructor(
         viewModelScope.launch {
             runCatching { herdr.readPane(machineId, paneId, ansi = true, source = "visible") }
                 .onSuccess { read ->
+                    // Only touch state when the screen actually changed. A poll that
+                    // rewrites identical text recomposes the terminal and fights the
+                    // user's scroll position every couple of seconds.
+                    if (read.text == _uiState.value.text) {
+                        _uiState.value = _uiState.value.copy(error = null)
+                        return@onSuccess
+                    }
                     _uiState.value = _uiState.value.copy(
                         text = read.text,
                         snapshotAt = Instant.now(),
@@ -236,6 +254,14 @@ class PaneViewModel @AssistedInject constructor(
         _uiState.value = _uiState.value.copy(error = null)
     }
 }
+
+/**
+ * How often an open pane is re-read.
+ *
+ * Two seconds is a compromise: one SSH exec channel per poll, only while a pane is on
+ * screen, against output that feels current enough to answer an agent from.
+ */
+private const val POLL_INTERVAL_MS = 2_000L
 
 /** "Permission · macbook · gerrit-sanctum › solver · ⎇ sanctum@wta-fix" */
 internal fun AgentEntry.paneMeta(): String = buildString {

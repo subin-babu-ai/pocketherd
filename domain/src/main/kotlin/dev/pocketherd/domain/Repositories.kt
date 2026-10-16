@@ -42,8 +42,7 @@ interface HerdrRepository {
         source: String = "visible",
     ): PaneRead
 
-    /** Emits each time herdr reports new output for this pane, carrying the new revision. */
-    fun observePaneRevision(machineId: Long, paneId: String): Flow<Long>
+
 
     suspend fun sendText(machineId: Long, paneId: String, text: String)
     suspend fun sendKeys(machineId: Long, paneId: String, keys: String)

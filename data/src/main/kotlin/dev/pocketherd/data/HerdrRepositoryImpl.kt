@@ -192,11 +192,6 @@ class HerdrRepositoryImpl @Inject constructor(
     override fun observeConnection(machineId: Long): Flow<ConnectionState> =
         flowOfSession(machineId) { _, session -> session.connection }
 
-    override fun observePaneRevision(machineId: Long, paneId: String): Flow<Long> =
-        flowOfSession(machineId) { _, session ->
-            session.revisions.filter { it.first == paneId }.map { it.second }
-        }
-
     override suspend fun readPane(
         machineId: Long,
         paneId: String,

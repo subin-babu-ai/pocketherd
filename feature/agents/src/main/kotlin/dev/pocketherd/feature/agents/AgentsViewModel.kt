@@ -9,7 +9,10 @@ import dev.pocketherd.domain.MachineStatus
 import dev.pocketherd.domain.ObserveAllAgentsUseCase
 import dev.pocketherd.domain.ObserveMachineStatusUseCase
 import dev.pocketherd.domain.SinceSummary
+import dev.pocketherd.domain.AgentGroup
 import dev.pocketherd.domain.Triage
+import dev.pocketherd.domain.blockedBySpace
+import dev.pocketherd.domain.groupBySpace
 import dev.pocketherd.domain.blockedMachines
 import dev.pocketherd.domain.pendingHostKey
 import dev.pocketherd.domain.since
@@ -23,7 +26,16 @@ import kotlinx.coroutines.launch
 import java.time.Instant
 import javax.inject.Inject
 
+enum class ListView { Inbox, Spaces }
+
 data class AgentsUiState(
+    val view: ListView = ListView.Inbox,
+    /** Blocked agents grouped by space; what the dock renders. */
+    val dock: List<AgentGroup> = emptyList(),
+    /** Space cards for the Spaces view. */
+    val spaces: List<AgentGroup> = emptyList(),
+    val spaceFilter: String? = null,
+    val spaceFilterLabel: String? = null,
     val triage: Triage = Triage(emptyList(), emptyList(), emptyList(), emptyList(), emptyList()),
     val machines: List<MachineStatus> = emptyList(),
     val machineFilter: Long? = null,
@@ -48,6 +60,8 @@ class AgentsViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val machineFilter = MutableStateFlow<Long?>(null)
+    private val spaceFilter = MutableStateFlow<String?>(null)
+    private val view = MutableStateFlow(ListView.Inbox)
 
     // Shells are a collapsed section now rather than a chip, so the use case is asked for
     // everything and the sectioning decides what surfaces.
@@ -57,12 +71,22 @@ class AgentsViewModel @Inject constructor(
         combine(
             agents,
             observeMachineStatus(),
-            machineFilter,
+            combine(machineFilter, spaceFilter, view) { m, sp, v -> Triple(m, sp, v) },
             herdr.lastSeenAt,
-        ) { list, statuses, filter, lastSeen ->
+        ) { list, statuses, (filter, space, listView), lastSeen ->
             val realAgents = list.filter { it.pane.isAgent }
+            val scopedForSpaces =
+                if (filter == null) list else list.filter { it.machineId == filter }
             AgentsUiState(
-                triage = list.triage(machineFilter = filter),
+                view = listView,
+                dock = list.blockedBySpace(),
+                spaces = scopedForSpaces.groupBySpace(),
+                spaceFilter = space,
+                spaceFilterLabel = space?.let { key ->
+                    list.firstOrNull { it.spaceKey == key }
+                        ?.let { "${it.workspace?.displayName ?: "space"} ${it.machineLabel}" }
+                },
+                triage = list.triage(machineFilter = filter, spaceFilter = space),
                 machines = statuses,
                 machineFilter = filter,
                 lastSeenAt = lastSeen,
@@ -80,6 +104,20 @@ class AgentsViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = AgentsUiState(),
         )
+
+    fun setView(next: ListView) {
+        view.value = next
+    }
+
+    /** "Show in inbox" from a space card: filter to it and switch views. */
+    fun showSpaceInInbox(spaceKey: String) {
+        spaceFilter.value = spaceKey
+        view.value = ListView.Inbox
+    }
+
+    fun clearSpaceFilter() {
+        spaceFilter.value = null
+    }
 
     fun toggleMachine(machineId: Long) {
         machineFilter.value = if (machineFilter.value == machineId) null else machineId

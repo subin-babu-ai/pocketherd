@@ -95,7 +95,21 @@ data class Tab(
     @SerialName("agent_status") val agentStatus: AgentStatus = AgentStatus.Unknown,
     @SerialName("pane_count") val paneCount: Int = 0,
     val focused: Boolean = false,
-)
+) {
+    /**
+     * The label, unless it is just the tab number again.
+     *
+     * herdr defaults a tab's label to its own number, so an unnamed tab would render as
+     * "tab 1 1" in the dock and "› 1" in a row. Only a name the user actually chose is
+     * worth the space.
+     */
+    val meaningfulLabel: String?
+        get() = label?.takeIf { it.isNotBlank() && it != number?.toString() }
+
+    /** "tab 3 planner", or "tab 3" when the tab was never named. */
+    val display: String
+        get() = listOfNotNull("tab", number?.toString(), meaningfulLabel).joinToString(" ")
+}
 
 @Serializable
 data class Workspace(
@@ -149,6 +163,7 @@ data class AgentEntry(
     val machineLabel: String,
     val pane: Pane,
     val workspace: Workspace?,
+    val tab: Tab? = null,
     /** When the current status began. Null until the client has anything to go on. */
     val statusSince: Instant? = null,
     /**
@@ -164,6 +179,9 @@ data class AgentEntry(
     val prompt: PromptKind? = null,
 ) {
     val key: String get() = "$machineId:${pane.paneId}"
+
+    /** Stable identity of the space this agent sits in, unique across machines. */
+    val spaceKey: String get() = "$machineId:${workspace?.workspaceId ?: ""}"
 }
 
 /**

@@ -2,6 +2,7 @@ package dev.pocketherd.core.protocol
 
 import kotlinx.serialization.SerialName
 import dev.pocketherd.core.model.Pane
+import dev.pocketherd.core.model.Tab
 import dev.pocketherd.core.model.Workspace
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
@@ -68,6 +69,7 @@ data class Snapshot(
     val version: String = "",
     val protocol: Int = 0,
     val workspaces: List<Workspace> = emptyList(),
+    val tabs: List<Tab> = emptyList(),
     val panes: List<Pane> = emptyList(),
 )
 

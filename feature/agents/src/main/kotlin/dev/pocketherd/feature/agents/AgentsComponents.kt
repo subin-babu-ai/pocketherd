@@ -12,13 +12,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -29,8 +32,12 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.InputChip
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -75,6 +82,8 @@ fun SummaryHeader(
     onOpenMachines: () -> Unit,
     onPickMachine: (Long) -> Unit,
     onClearMachine: () -> Unit,
+    onSetView: (ListView) -> Unit,
+    onClearSpaceFilter: () -> Unit,
 ) {
     // The app draws edge to edge, so a custom top bar has to consume the status bar
     // inset itself; without this the headline renders under the clock.
@@ -104,33 +113,70 @@ fun SummaryHeader(
             }
         }
 
-        // Only worth the space once there is more than one machine to choose between.
-        if (state.machines.size > 1) {
-            Row(
-                Modifier
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
+        // One scrolling row: view toggle, divider, space filter if set, machine chips.
+        Row(
+            Modifier
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SingleChoiceSegmentedButtonRow(Modifier.height(40.dp)) {
+                ListView.entries.forEachIndexed { index, option ->
+                    SegmentedButton(
+                        selected = state.view == option,
+                        onClick = { onSetView(option) },
+                        shape = SegmentedButtonDefaults.itemShape(index, ListView.entries.size),
+                    ) { Text(option.name) }
+                }
+            }
+
+            VerticalDivider(
+                Modifier.height(24.dp),
+                color = MaterialTheme.colorScheme.outlineVariant,
+            )
+
+            // A space filter is removable, so it is an InputChip rather than a FilterChip.
+            state.spaceFilterLabel?.let { label ->
+                InputChip(
+                    selected = true,
+                    onClick = onClearSpaceFilter,
+                    label = { Text(label) },
+                    trailingIcon = {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Clear space filter",
+                            modifier = Modifier.size(16.dp),
+                        )
+                    },
+                )
+            }
+
+            if (state.machines.size > 1) {
                 FilterChip(
                     selected = state.machineFilter == null,
                     onClick = onClearMachine,
                     label = { Text("All ${state.totalAgents}") },
+                    leadingIcon = selectedCheck(state.machineFilter == null),
                 )
                 state.machines.forEach { status ->
                     val count = state.countsByMachine[status.machine.id] ?: 0
+                    val selected = state.machineFilter == status.machine.id
                     FilterChip(
-                        selected = state.machineFilter == status.machine.id,
+                        selected = selected,
                         onClick = { onPickMachine(status.machine.id) },
                         label = { Text("${status.machine.label} $count") },
-                        leadingIcon = {
-                            if (status.state !is ConnectionState.Connected) {
-                                Icon(
-                                    Icons.Default.CloudOff,
-                                    contentDescription = "not connected",
-                                    modifier = Modifier.size(16.dp),
-                                )
+                        leadingIcon = when {
+                            status.state !is ConnectionState.Connected -> {
+                                {
+                                    Icon(
+                                        Icons.Default.CloudOff,
+                                        contentDescription = "not connected",
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                }
                             }
+                            else -> selectedCheck(selected)
                         },
                     )
                 }
@@ -138,6 +184,18 @@ fun SummaryHeader(
         }
     }
 }
+
+/** M3 draws no check on a selected FilterChip unless one is supplied. */
+private fun selectedCheck(selected: Boolean): (@Composable () -> Unit)? =
+    if (!selected) null else {
+        {
+            Icon(
+                Icons.Default.Check,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+    }
 
 @Composable
 private fun SummarySubline(state: AgentsUiState) {
@@ -275,10 +333,7 @@ fun AgentRow(
 ) {
     val minutes = entry.ageMinutes(now)
     val spokenAge = minutes?.let { formatAgeSpoken(it, entry.statusSinceExact) }.orEmpty()
-    val meta = buildString {
-        if (showMachine) append("${entry.machineLabel}, ")
-        entry.workspace?.displayName?.let { append(it) }
-    }
+    val meta = entry.rowMeta(showMachine)
 
     Row(
         modifier
@@ -305,7 +360,7 @@ fun AgentRow(
             )
             if (meta.isNotBlank()) {
                 Text(
-                    meta.trimEnd(',', ' '),
+                    meta,
                     modifier = Modifier.padding(top = 2.dp),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -339,7 +394,7 @@ fun QuietRow(entry: AgentEntry, mono: Boolean = false, onClick: () -> Unit) {
             .padding(horizontal = 20.dp, vertical = 4.dp)
             .clearAndSetSemantics {
                 contentDescription = "${entry.pane.agentStatus.label()}, " +
-                    "${entry.pane.displayName}, ${entry.machineLabel}"
+                    "${entry.pane.displayName}, ${entry.rowMeta()}"
             },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -428,4 +483,16 @@ fun HostKeyDialog(
         },
         dismissButton = { TextButton(onClick = { dismissed = true }) { Text("Cancel") } },
     )
+}
+
+/** "desktop · r2ms-bugs › planner", dropping any part that is missing. */
+fun AgentEntry.rowMeta(showMachine: Boolean = true): String = buildString {
+    if (showMachine) append(machineLabel)
+    workspace?.displayName?.let {
+        if (isNotEmpty()) append(" · ")
+        append(it)
+    }
+    // The tab only earns its place when it was actually named; herdr defaults the label
+    // to the tab number, which says nothing.
+    tab?.meaningfulLabel?.let { append(" › $it") }
 }

@@ -33,13 +33,19 @@ data class Triage(
  * because you were looking at a different machine is how you miss the thing the app exists
  * to surface; the dock always shows everything.
  */
-fun List<AgentEntry>.triage(machineFilter: Long? = null): Triage {
+fun List<AgentEntry>.triage(
+    machineFilter: Long? = null,
+    spaceFilter: String? = null,
+): Triage {
     val blocked = filter { it.pane.agentStatus == AgentStatus.Blocked }
         // Oldest first: the agent that has been waiting longest is the one to answer.
         // Entries with no known time sort last rather than pretending to be ancient.
         .sortedWith(compareBy(nullsLast()) { it.statusSince })
 
-    val scoped = if (machineFilter == null) this else filter { it.machineId == machineFilter }
+    // Neither filter touches the dock; see the note on [Triage.needsYou].
+    val scoped = this
+        .let { list -> machineFilter?.let { m -> list.filter { it.machineId == m } } ?: list }
+        .let { list -> spaceFilter?.let { sp -> list.filter { it.spaceKey == sp } } ?: list }
 
     val agents = scoped.filter { it.pane.isAgent && it.pane.agentStatus != AgentStatus.Blocked }
     val newest = compareByDescending<AgentEntry> { it.statusSince ?: Instant.EPOCH }

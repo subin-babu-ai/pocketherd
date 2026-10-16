@@ -36,7 +36,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.outlined.Workspaces
 import dev.pocketherd.core.model.AgentEntry
+import dev.pocketherd.domain.AgentGroup
 import dev.pocketherd.core.ui.component.StatusGlyph
 import dev.pocketherd.core.ui.formatAgeDisplay
 import dev.pocketherd.core.ui.formatAgeSpoken
@@ -58,11 +60,12 @@ private const val COLLAPSED_ROWS = 3
  */
 @Composable
 fun BlockedDock(
-    blocked: List<AgentEntry>,
+    groups: List<AgentGroup>,
     now: Instant,
     filtered: Boolean,
     onOpen: (AgentEntry) -> Unit,
 ) {
+    val blocked = groups.flatMap { it.agents }
     var expanded by remember { mutableStateOf(false) }
 
     Surface(
@@ -113,20 +116,28 @@ fun BlockedDock(
                 Text(
                     // While a machine filter is on, say so: the dock ignores it and that
                     // would otherwise look like a bug.
-                    if (filtered) "All machines · oldest first" else "Oldest first",
+                    if (filtered) "Ignores filters · by space" else "By space, oldest first",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 
-            val shown = if (expanded) blocked else blocked.take(COLLAPSED_ROWS)
+            // Headers do not count against the collapsed limit; three agent rows is the
+            // budget regardless of how many spaces they are spread across.
+            var budget = if (expanded) Int.MAX_VALUE else COLLAPSED_ROWS
             Column(
                 Modifier
                     .heightIn(max = if (expanded) 460.dp else Dp.Unspecified)
                     .then(if (expanded) Modifier.verticalScroll(rememberScrollState()) else Modifier),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                shown.forEach { entry -> DockRow(entry, now) { onOpen(entry) } }
+                groups.forEach { group ->
+                    if (budget <= 0) return@forEach
+                    val rows = group.agents.take(budget)
+                    budget -= rows.size
+                    SpaceDockHeader(group)
+                    rows.forEach { entry -> DockRow(entry, now) { onOpen(entry) } }
+                }
             }
 
             if (blocked.size > COLLAPSED_ROWS) {
@@ -146,14 +157,42 @@ fun BlockedDock(
     }
 }
 
+/** Which space the blocked agents below belong to. */
+@Composable
+private fun SpaceDockHeader(group: AgentGroup) {
+    Row(
+        Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(
+            Icons.Outlined.Workspaces,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(16.dp),
+        )
+        Text(
+            group.spaceLabel,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            group.machineLabel,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+        )
+    }
+}
+
 @Composable
 private fun DockRow(entry: AgentEntry, now: Instant, onOpen: () -> Unit) {
     val minutes = entry.ageMinutes(now)
-    val meta = buildString {
-        entry.prompt?.let { append("${it.label} · ") }
-        append(entry.machineLabel)
-        entry.workspace?.displayName?.let { append(" · $it") }
-    }
+    // The space is already in the group header above, so the row spends its line on what
+    // the agent is asking and which tab it is in.
+    val meta = listOfNotNull(entry.prompt?.label, entry.tab?.display).joinToString(" · ")
     val spoken = minutes?.let { formatAgeSpoken(it, entry.statusSinceExact) }.orEmpty()
 
     Row(

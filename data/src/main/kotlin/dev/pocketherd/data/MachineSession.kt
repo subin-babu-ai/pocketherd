@@ -122,6 +122,7 @@ class MachineSession(
                 _state.value = SessionState(
                     panes = snapshot.panes.associateBy { it.paneId },
                     workspaces = snapshot.workspaces.associateBy { it.workspaceId },
+                    tabs = snapshot.tabs.associateBy { it.tabId },
                     meta = bootstrapMeta(snapshot.panes, connectedAt),
                 )
                 Log.i(

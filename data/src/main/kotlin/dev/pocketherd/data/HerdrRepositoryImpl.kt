@@ -136,6 +136,7 @@ class HerdrRepositoryImpl @Inject constructor(
                         machineLabel = machine.label,
                         pane = pane,
                         workspace = pane.workspaceId?.let(state.workspaces::get),
+                        tab = pane.tabId?.let(state.tabs::get),
                         // An upstream timestamp, once herdr sends one, beats anything the
                         // client inferred.
                         statusSince = pane.statusChangedAt?.let(::parseInstant)

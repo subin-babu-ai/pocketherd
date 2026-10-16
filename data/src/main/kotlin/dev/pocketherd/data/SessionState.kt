@@ -2,6 +2,7 @@ package dev.pocketherd.data
 
 import dev.pocketherd.core.model.AgentStatus
 import dev.pocketherd.core.model.Pane
+import dev.pocketherd.core.model.Tab
 import dev.pocketherd.core.model.Workspace
 import dev.pocketherd.core.protocol.EventTypes
 import dev.pocketherd.core.protocol.HerdrEventEnvelope
@@ -25,6 +26,7 @@ data class PaneMeta(
 data class SessionState(
     val panes: Map<String, Pane> = emptyMap(),
     val workspaces: Map<String, Workspace> = emptyMap(),
+    val tabs: Map<String, Tab> = emptyMap(),
     /** Per-pane status timing and unread, keyed by pane id. */
     val meta: Map<String, PaneMeta> = emptyMap(),
 ) {
@@ -76,6 +78,12 @@ data class SessionState(
                 copy(panes = panes + (id to existing.copy(revision = revision)))
             }
 
+            EventTypes.TAB_CREATED, EventTypes.TAB_RENAMED ->
+                data.tab?.let { copy(tabs = tabs + (it.tabId to it)) } ?: this
+
+            EventTypes.TAB_CLOSED ->
+                data.tabId?.let { copy(tabs = tabs - it) } ?: this
+
             EventTypes.WORKSPACE_CREATED, EventTypes.WORKSPACE_UPDATED ->
                 data.workspace?.let { copy(workspaces = workspaces + (it.workspaceId to it)) }
                     ?: this
@@ -84,6 +92,7 @@ data class SessionState(
                 data.workspaceId?.let { closed ->
                     copy(
                         workspaces = workspaces - closed,
+                        tabs = tabs.filterValues { it.workspaceId != closed },
                         panes = panes.filterValues { it.workspaceId != closed },
                     )
                 } ?: this

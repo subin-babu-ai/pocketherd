@@ -2,6 +2,7 @@ package dev.pocketherd.core.protocol
 
 import dev.pocketherd.core.model.AgentStatus
 import dev.pocketherd.core.model.Pane
+import dev.pocketherd.core.model.Tab
 import dev.pocketherd.core.model.Workspace
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -34,6 +35,9 @@ object EventFilters {
     const val WORKSPACE_CREATED = "workspace.created"
     const val WORKSPACE_UPDATED = "workspace.updated"
     const val WORKSPACE_CLOSED = "workspace.closed"
+    const val TAB_CREATED = "tab.created"
+    const val TAB_CLOSED = "tab.closed"
+    const val TAB_RENAMED = "tab.renamed"
 
     /** Requires a pane_id. */
     const val PANE_AGENT_STATUS_CHANGED = "pane.agent_status_changed"
@@ -48,6 +52,9 @@ object EventFilters {
         WORKSPACE_CREATED,
         WORKSPACE_UPDATED,
         WORKSPACE_CLOSED,
+        TAB_CREATED,
+        TAB_CLOSED,
+        TAB_RENAMED,
     )
 
     /** Every global filter plus one agent-status filter per pane we currently know about. */
@@ -68,6 +75,9 @@ object EventTypes {
     const val WORKSPACE_CREATED = "workspace_created"
     const val WORKSPACE_UPDATED = "workspace_updated"
     const val WORKSPACE_CLOSED = "workspace_closed"
+    const val TAB_CREATED = "tab_created"
+    const val TAB_CLOSED = "tab_closed"
+    const val TAB_RENAMED = "tab_renamed"
 }
 
 @Serializable
@@ -93,6 +103,8 @@ data class EventData(
     @SerialName("workspace_id") val workspaceId: String? = null,
     val pane: Pane? = null,
     val workspace: Workspace? = null,
+    val tab: Tab? = null,
+    @SerialName("tab_id") val tabId: String? = null,
     /** Present on pane_agent_status_changed, so status updates need no follow-up fetch. */
     @SerialName("agent_status") val agentStatus: AgentStatus? = null,
     val agent: String? = null,

@@ -106,14 +106,16 @@ fun AgentsScreen(
                 onOpenMachines = onOpenMachines,
                 onPickMachine = viewModel::toggleMachine,
                 onClearMachine = viewModel::clearMachineFilter,
+                onSetView = viewModel::setView,
+                onClearSpaceFilter = viewModel::clearSpaceFilter,
             )
         },
         bottomBar = {
             // Outside the list on purpose: what needs a human must not scroll away.
             BlockedDock(
-                blocked = state.triage.needsYou,
+                groups = state.dock,
                 now = now,
-                filtered = state.machineFilter != null,
+                filtered = state.machineFilter != null || state.spaceFilter != null,
                 onOpen = { onOpenPane(it.machineId, it.pane.paneId) },
             )
         },
@@ -124,6 +126,13 @@ fun AgentsScreen(
                 !state.hasMachines -> CenteredMessage(
                     "No machines yet.\nAdd one running herdr to get started.",
                 )
+                state.view == ListView.Spaces -> SpacesView(
+                    spaces = state.spaces,
+                    now = now,
+                    onOpenPane = onOpenPane,
+                    onShowInInbox = viewModel::showSpaceInInbox,
+                )
+
                 else -> TriageList(state, now, viewModel, onOpenPane)
             }
         }

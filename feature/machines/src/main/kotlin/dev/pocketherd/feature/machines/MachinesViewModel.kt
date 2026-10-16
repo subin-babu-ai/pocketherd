@@ -6,11 +6,16 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.pocketherd.core.model.AuthMethod
 import dev.pocketherd.core.model.Machine
 import dev.pocketherd.core.ssh.KeystoreIdentity
+import dev.pocketherd.core.model.AgentStatus
+import dev.pocketherd.domain.ConnectionState
 import dev.pocketherd.domain.MachineRepository
+import dev.pocketherd.domain.ObserveAllAgentsUseCase
+import dev.pocketherd.domain.ObserveMachineStatusUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -30,8 +35,12 @@ data class MachineForm(
     val via: Long? = null,
     /** One address per line, tried when the primary fails. */
     val fallbackHosts: String = "",
+    val open: Boolean = false,
 ) {
     val isEditing: Boolean get() = editingId != 0L
+
+    /** The form is a screen of its own, so it needs an explicit open flag. */
+    val isOpen: Boolean get() = open
     val canSave: Boolean get() = host.isNotBlank() && username.isNotBlank()
 
     fun toMachine() = Machine(
@@ -60,13 +69,44 @@ data class MachineForm(
     }
 }
 
+/** A machine plus everything the card shows about it. */
+data class MachineCard(
+    val machine: Machine,
+    val state: ConnectionState,
+    val blocked: Int,
+    val agents: Int,
+    val shells: Int,
+)
+
 @HiltViewModel
 class MachinesViewModel @Inject constructor(
     private val repository: MachineRepository,
+    observeMachineStatus: ObserveMachineStatusUseCase,
+    observeAllAgents: ObserveAllAgentsUseCase,
 ) : ViewModel() {
 
     val machines: StateFlow<List<Machine>> = repository.observeMachines()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /**
+     * The cards. Counts come from the same agent stream the inbox uses, so a machine's
+     * card and its rows in the inbox can never disagree.
+     */
+    val cards: StateFlow<List<MachineCard>> =
+        combine(observeMachineStatus(), observeAllAgents(agentsOnly = false)) { statuses, all ->
+            statuses.map { status ->
+                val mine = all.filter { it.machineId == status.machine.id }
+                MachineCard(
+                    machine = status.machine,
+                    state = status.state,
+                    blocked = mine.count {
+                        it.pane.isAgent && it.pane.agentStatus == AgentStatus.Blocked
+                    },
+                    agents = mine.count { it.pane.isAgent },
+                    shells = mine.count { !it.pane.isAgent },
+                )
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private val _form = MutableStateFlow(MachineForm())
     val form: StateFlow<MachineForm> = _form.asStateFlow()
@@ -89,7 +129,11 @@ class MachinesViewModel @Inject constructor(
     }
 
     fun edit(machine: Machine) {
-        _form.value = MachineForm.of(machine)
+        _form.value = MachineForm.of(machine).copy(open = true)
+    }
+
+    fun addMachine() {
+        _form.value = MachineForm(open = true)
     }
 
     fun cancelEdit() {

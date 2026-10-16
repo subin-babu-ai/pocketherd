@@ -134,6 +134,33 @@ Separately, this Mac's tailnet address is unreachable from the phone even inside
 while the Mac can `tailscale ping` the phone. ShieldsUp is false and both nodes are online,
 so this looks like a tailnet ACL rather than anything the app controls.
 
+### Live terminal is possible, by attaching rather than reading
+
+The pane view polls `pane.read` every 2s because herdr's JSON API has no change
+notification: `pane.output_changed` has no subscription filter, `pane.output_matched`
+fires once at subscribe time, `pane.wait_for_output` long-polls but only until a pattern
+matches and a catch-all matches the current screen, and `pane.read` reports revision 0.
+
+herdrm does not use that API for its terminal at all. It spawns `herdr agent attach
+<paneId> --takeover` as a subprocess and renders the resulting PTY with libghostty.
+`pane.read` appears twice in the whole app, in neither case the terminal view.
+
+The same is open to this app: `ssh host 'herdr agent attach <paneId> --takeover'` with a
+PTY allocated on the channel. herdr is already on the host, so it needs nothing installed,
+and the binary protocol is herdr's problem rather than the client's.
+
+What it costs:
+
+- **A terminal emulator.** A PTY carries cursor addressing, scroll regions and the alt
+  screen. `AnsiParser` handles SGR only, on purpose, because `pane.read(source=visible)`
+  returns a screen herdr has already composed. Raw PTY bytes through it would be confetti.
+- **`--takeover` steals the attach** from whoever else is looking at that pane.
+- **PTY sizing** has to track the view, and resize on fold.
+
+Worth doing if the pane view should be a terminal rather than a window onto one. The
+design brief explicitly asks for the opposite today: "don't add anything that looks
+character-by-character live".
+
 ### Jump hosts
 
 `SshConnection.openTransport` is deliberately separate from `connect`: a jump host is a

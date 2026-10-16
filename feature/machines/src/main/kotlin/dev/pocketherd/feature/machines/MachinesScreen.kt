@@ -1,56 +1,91 @@
 package dev.pocketherd.feature.machines
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.PanTool
+import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.outlined.DesktopWindows
+import androidx.compose.material.icons.outlined.LaptopMac
+import androidx.compose.material.icons.outlined.Terminal
+import androidx.compose.material.icons.outlined.VpnKey
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.pocketherd.core.model.Machine
+import dev.pocketherd.domain.ConnectionState
 import kotlinx.coroutines.launch
 
+/**
+ * Machines as a status page rather than a form.
+ *
+ * The old screen led with an add/edit form, so the common case — "is my desktop
+ * connected, and why not" — was answered by scrolling past a form you did not want. Now
+ * each machine is a card that answers that, and adding one is a button.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MachinesScreen(
     onBack: () -> Unit,
     viewModel: MachinesViewModel = hiltViewModel(),
 ) {
+    val cards by viewModel.cards.collectAsStateWithLifecycle()
     val machines by viewModel.machines.collectAsStateWithLifecycle()
     val publicKey by viewModel.publicKey.collectAsStateWithLifecycle()
     val form by viewModel.form.collectAsStateWithLifecycle()
-    val clipboard = LocalClipboard.current
-    val scope = rememberCoroutineScope()
+
+    // The form is a screen of its own, so the list never has to scroll past it.
+    if (form.isOpen) {
+        MachineFormScreen(
+            form = form,
+            others = machines.filter { it.id != form.editingId },
+            onChange = viewModel::update,
+            onSave = viewModel::save,
+            onCancel = viewModel::cancelEdit,
+        )
+        return
+    }
 
     Scaffold(
         topBar = {
@@ -63,239 +98,258 @@ fun MachinesScreen(
                 },
             )
         },
+        floatingActionButton = {
+            ExtendedFloatingActionButton(
+                onClick = viewModel::addMachine,
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                text = { Text("Add machine") },
+            )
+        },
     ) { padding ->
         LazyColumn(
-            Modifier
-                .padding(padding)
-                .padding(horizontal = 16.dp),
+            Modifier.padding(padding).fillMaxSize(),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp,
+            ),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            item {
-                Card {
-                    Column(Modifier.padding(16.dp)) {
-                        Text("This device's SSH key", style = MaterialTheme.typography.titleSmall)
-                        Text(
-                            "Add this line to ~/.ssh/authorized_keys on every machine you " +
-                                "want to reach. The private half is generated in the Android " +
-                                "Keystore and cannot leave this phone.",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        Text(
-                            text = publicKey,
-                            fontFamily = FontFamily.Monospace,
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(vertical = 8.dp),
-                            maxLines = 3,
-                        )
-                        Button(
-                            onClick = {
-                                scope.launch {
-                                    clipboard.setClipEntry(
-                                        ClipEntry(
-                                            android.content.ClipData.newPlainText(
-                                                "pocketherd ssh key",
-                                                publicKey,
-                                            ),
-                                        ),
-                                    )
-                                }
-                            },
-                        ) {
-                            Text("Copy public key")
-                        }
-                    }
-                }
+            // With nothing set up, the key is the first thing you need, not the last.
+            if (cards.isEmpty()) {
+                item { KeyCard(publicKey) }
             }
 
-            item {
-                Text(
-                    if (form.isEditing) "Edit machine" else "Add a machine",
-                    style = MaterialTheme.typography.titleSmall,
-                )
-                Field(form.label, { viewModel.update(form.copy(label = it)) }, "Label (optional)")
-                Field(form.host, { viewModel.update(form.copy(host = it)) }, "Host or IP")
-                Field(
-                    form.port,
-                    { viewModel.update(form.copy(port = it.filter(Char::isDigit))) },
-                    "Port",
-                )
-                Field(
-                    form.username,
-                    { viewModel.update(form.copy(username = it)) },
-                    "Username",
-                )
-                Field(
-                    form.socketPath,
-                    { viewModel.update(form.copy(socketPath = it)) },
-                    "herdr socket (blank = ~/.config/herdr/herdr.sock)",
-                )
-                OutlinedTextField(
-                    value = form.fallbackHosts,
-                    onValueChange = { viewModel.update(form.copy(fallbackHosts = it)) },
-                    label = { Text("Other addresses, one per line") },
-                    supportingText = {
-                        Text(
-                            "Tried in order when the first fails, so one entry works on " +
-                                "any network. A tailnet address belongs here.",
-                        )
+            items(cards, key = { it.machine.id }) { card ->
+                MachineCardView(card) { viewModel.edit(card.machine) }
+            }
+
+            if (cards.isNotEmpty()) {
+                item { KeyCard(publicKey) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MachineCardView(card: MachineCard, onOpen: () -> Unit) {
+    val failed = card.state is ConnectionState.Failed ||
+        card.state is ConnectionState.HostKeyChanged
+
+    Surface(
+        color = if (failed) {
+            MaterialTheme.colorScheme.errorContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceContainer
+        },
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen),
+    ) {
+        Column(
+            Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Icon(
+                    if (card.machine.label.contains("book", ignoreCase = true)) {
+                        Icons.Outlined.LaptopMac
+                    } else {
+                        Icons.Outlined.DesktopWindows
                     },
-                    minLines = 2,
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
                 )
-
-                // Only machines that are not the one being edited, and that do not
-                // themselves route through it, can serve as a jump host.
-                JumpHostPicker(
-                    machines = machines.filter { it.id != form.editingId },
-                    selected = form.via,
-                    onSelect = { viaId -> viewModel.update(form.copy(via = viaId)) },
-                )
-
-                if (form.isEditing) {
+                Column(Modifier.weight(1f)) {
                     Text(
-                        "Changing the host or port clears this machine's trusted key, so " +
-                            "you will be asked to approve the new one.",
-                        style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.padding(top = 4.dp),
+                        card.machine.label,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        "${card.machine.username}@${card.machine.host}:${card.machine.port}",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
+                Icon(
+                    Icons.Default.ChevronRight,
+                    contentDescription = "Edit ${card.machine.label}",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
 
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.padding(top = 8.dp),
-                ) {
-                    Button(onClick = viewModel::save, enabled = form.canSave) {
-                        Text(if (form.isEditing) "Save changes" else "Add")
+            ConnectionLine(card.state)
+
+            if (!failed) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (card.blocked > 0) {
+                        CountChip(Icons.Default.PanTool, "${card.blocked} blocked", urgent = true)
                     }
-                    if (form.isEditing) {
-                        OutlinedButton(onClick = viewModel::cancelEdit) { Text("Cancel") }
+                    if (card.agents > 0) {
+                        CountChip(Icons.Default.SmartToy, "${card.agents} agents")
+                    }
+                    if (card.shells > 0) {
+                        CountChip(Icons.Outlined.Terminal, "${card.shells} shells")
                     }
                 }
             }
-
-            items(machines, key = { it.id }) { machine ->
-                HorizontalDivider()
-                MachineRow(
-                    machine = machine,
-                    selected = form.editingId == machine.id,
-                    onEdit = { viewModel.edit(machine) },
-                    onDelete = { viewModel.delete(machine.id) },
-                )
-            }
         }
     }
 }
 
 @Composable
-private fun MachineRow(
-    machine: Machine,
-    selected: Boolean,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit,
-) {
+private fun ConnectionLine(state: ConnectionState) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        when (state) {
+            is ConnectionState.Connected -> {
+                Icon(
+                    Icons.Default.CheckCircle,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp),
+                )
+                Text(
+                    "Connected · herdr ${state.herdrVersion} · protocol ${state.protocol}",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+
+            is ConnectionState.Connecting -> {
+                CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                Text("Connecting…", style = MaterialTheme.typography.bodyMedium)
+            }
+
+            is ConnectionState.NeedsHostKeyApproval -> {
+                Icon(
+                    Icons.Default.ErrorOutline,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Text(
+                    "Waiting for you to trust its host key",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+
+            // The reason is the whole point of the card for a broken machine, so it
+            // wraps rather than truncating.
+            is ConnectionState.HostKeyChanged -> Text(
+                "Host key changed. Expected ${state.expected}, got ${state.actual}.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+            )
+
+            is ConnectionState.Failed -> Text(
+                state.reason,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+            )
+
+            ConnectionState.Disconnected -> Text(
+                "Not connected",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun CountChip(icon: ImageVector, label: String, urgent: Boolean = false) {
+    val bg = if (urgent) {
+        MaterialTheme.colorScheme.errorContainer
+    } else {
+        MaterialTheme.colorScheme.surfaceContainerHighest
+    }
+    val fg = if (urgent) {
+        MaterialTheme.colorScheme.onErrorContainer
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
     Row(
         Modifier
-            .fillMaxWidth()
-            // The whole row is the edit target; the pencil is there to make that discoverable.
-            .clickable(onClick = onEdit)
-            .padding(vertical = 4.dp),
+            .background(bg, RoundedCornerShape(8.dp))
+            .heightIn(min = 28.dp)
+            .padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(
-                machine.label,
-                style = MaterialTheme.typography.bodyLarge,
-                color = if (selected) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurface
+        Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(15.dp))
+        Text(label, style = MaterialTheme.typography.labelMedium, color = fg)
+    }
+}
+
+@Composable
+private fun KeyCard(publicKey: String) {
+    val clipboard = LocalClipboard.current
+    val scope = rememberCoroutineScope()
+
+    OutlinedCard(Modifier.fillMaxWidth()) {
+        Column(
+            Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Icon(
+                    Icons.Outlined.VpnKey,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Column {
+                    Text("This phone's SSH key", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Add it to ~/.ssh/authorized_keys on each machine. The private " +
+                            "half stays in the Android Keystore.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceContainer,
+                shape = RoundedCornerShape(8.dp),
+            ) {
+                Text(
+                    publicKey,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    modifier = Modifier.padding(10.dp),
+                )
+            }
+            TextButton(
+                onClick = {
+                    scope.launch {
+                        clipboard.setClipEntry(
+                            ClipEntry(
+                                android.content.ClipData.newPlainText(
+                                    "pocketherd ssh key",
+                                    publicKey,
+                                ),
+                            ),
+                        )
+                    }
                 },
-            )
-            Text(
-                "${machine.username}@${machine.host}:${machine.port}",
-                style = MaterialTheme.typography.bodySmall,
-                fontFamily = FontFamily.Monospace,
-            )
-            // Which address is actually in use, when there is more than one to choose from.
-            machine.lastGoodHost?.takeIf { machine.fallbackHosts.isNotEmpty() }?.let {
-                Text(
-                    "via $it",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.primary,
+            ) {
+                Icon(
+                    Icons.Default.ContentCopy,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
                 )
-            }
-            machine.socketPath?.let {
-                Text(
-                    it,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontFamily = FontFamily.Monospace,
-                )
+                Text("  Copy key", fontWeight = FontWeight.Medium)
             }
         }
-        IconButton(onClick = onEdit) {
-            Icon(Icons.Default.Edit, contentDescription = "Edit ${machine.label}")
-        }
-        IconButton(onClick = onDelete) {
-            Icon(Icons.Default.Delete, contentDescription = "Remove ${machine.label}")
-        }
     }
-}
-
-/**
- * Picks an optional jump host, the equivalent of OpenSSH's ProxyJump.
- *
- * Shown as chips rather than a dropdown because the list is short and the "Direct" case
- * should be visible as the selected default, not hidden behind a tap.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun JumpHostPicker(
-    machines: List<Machine>,
-    selected: Long?,
-    onSelect: (Long?) -> Unit,
-) {
-    if (machines.isEmpty()) return
-
-    Text(
-        "Connect via",
-        style = MaterialTheme.typography.labelMedium,
-        modifier = Modifier.padding(top = 8.dp),
-    )
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.padding(vertical = 4.dp),
-    ) {
-        FilterChip(
-            selected = selected == null,
-            onClick = { onSelect(null) },
-            label = { Text("Direct") },
-        )
-        machines.forEach { hop ->
-            FilterChip(
-                selected = selected == hop.id,
-                onClick = { onSelect(hop.id) },
-                label = { Text(hop.label) },
-            )
-        }
-    }
-    if (selected != null) {
-        Text(
-            "The hop only carries the connection. It does not need herdr running on it.",
-            style = MaterialTheme.typography.labelSmall,
-        )
-    }
-}
-
-@Composable
-private fun Field(value: String, onValueChange: (String) -> Unit, label: String) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = { Text(label) },
-        singleLine = true,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-    )
 }

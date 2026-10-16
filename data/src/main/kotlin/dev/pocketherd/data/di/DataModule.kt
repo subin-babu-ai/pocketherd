@@ -12,6 +12,7 @@ import dev.pocketherd.core.ssh.SshConnection
 import dev.pocketherd.core.ssh.SshTransport
 import dev.pocketherd.core.ssh.HostKeyChangedException
 import dev.pocketherd.core.ssh.StoredHostKeyVerifier
+import dev.pocketherd.core.ssh.UnknownHostKeyException
 import dev.pocketherd.core.ssh.findCause
 import dev.pocketherd.data.HerdrClient
 import dev.pocketherd.data.HerdrRepositoryImpl
@@ -133,9 +134,12 @@ class SshConnectorImpl @Inject constructor(
                 Log.i("PocketHerd", "${machine.label}: connected via $host")
                 return transport
             }
-            // A changed host key is a security decision, not a dead address; stop rather
-            // than quietly trying somewhere else.
-            attempt.exceptionOrNull()?.findCause<HostKeyChangedException>()?.let { throw it }
+            // Host key problems are decisions for the user, not dead addresses. Walking
+            // on would swallow the approval prompt and report the machine unreachable,
+            // which is exactly what it did the first time a machine was re-addressed.
+            val failure = attempt.exceptionOrNull()
+            failure?.findCause<HostKeyChangedException>()?.let { throw it }
+            failure?.findCause<UnknownHostKeyException>()?.let { throw it }
             Log.w("PocketHerd", "${machine.label}: $host unreachable")
         }
 

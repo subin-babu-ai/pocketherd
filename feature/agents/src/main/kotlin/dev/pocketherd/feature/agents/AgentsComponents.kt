@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -39,7 +38,9 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.VerticalDivider
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -118,6 +119,17 @@ fun SummaryHeader(
             }
         }
 
+        // Visible at a glance: something is still being attempted, as opposed to a list
+        // that is simply empty.
+        if (state.machines.any { it.state is ConnectionState.Connecting }) {
+            LinearProgressIndicator(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp)
+                    .height(2.dp),
+            )
+        }
+
         // One scrolling row: view toggle, divider, space filter if set, machine chips.
         Row(
             Modifier
@@ -171,21 +183,43 @@ fun SummaryHeader(
                         selected = selected,
                         onClick = { onPickMachine(status.machine.id) },
                         label = { Text("${status.machine.label} $count") },
-                        leadingIcon = when {
-                            status.state !is ConnectionState.Connected -> {
-                                {
-                                    Icon(
-                                        Icons.Default.CloudOff,
-                                        contentDescription = "not connected",
-                                        modifier = Modifier.size(16.dp),
-                                    )
-                                }
-                            }
-                            else -> selectedCheck(selected)
-                        },
+                        leadingIcon = machineChipIcon(status, selected),
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * The chip's leading icon doubles as the machine's connection state.
+ *
+ * Connecting gets a spinner rather than the same cloud-off as a hard failure: "still
+ * trying" and "gave up" need different responses from the user, and before this they
+ * looked identical.
+ */
+private fun machineChipIcon(
+    status: MachineStatus,
+    selected: Boolean,
+): (@Composable () -> Unit)? = when (status.state) {
+    is ConnectionState.Connecting -> {
+        {
+            CircularProgressIndicator(
+                modifier = Modifier.size(14.dp),
+                strokeWidth = 2.dp,
+            )
+        }
+    }
+
+    is ConnectionState.Connected -> selectedCheck(selected)
+
+    else -> {
+        {
+            Icon(
+                Icons.Default.CloudOff,
+                contentDescription = "not connected",
+                modifier = Modifier.size(16.dp),
+            )
         }
     }
 }
@@ -208,8 +242,13 @@ private fun SummarySubline(state: AgentsUiState) {
         .filter { it.state is ConnectionState.Failed || it.state is ConnectionState.HostKeyChanged }
         .joinToString { "${it.machine.label} unreachable" }
 
+    val connecting = state.machines.filter { it.state is ConnectionState.Connecting }
     val since = state.since
     val base = when {
+        // While connecting, counts are meaningless and a machine list is not.
+        connecting.isNotEmpty() && state.totalAgents == 0 ->
+            "Connecting to ${connecting.joinToString { it.machine.label }}…"
+
         state.lastSeenAt != null && since.any -> buildString {
             append("Since you looked at ${HH_MM.format(state.lastSeenAt)}: ")
             if (since.newlyBlocked > 0) append("${since.newlyBlocked} newly blocked")
@@ -500,7 +539,12 @@ fun HostKeyDialog(
                     modifier = Modifier.padding(vertical = 12.dp),
                 )
                 Text(
-                    "On that machine run: ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub",
+                    // -E md5 matters: SSHJ reports MD5, while ssh-keygen defaults to
+                    // SHA256. Without the flag the command prints a different format
+                    // from the one above, and a check that never matches is a check
+                    // the user learns to skip.
+                    "On that machine run:\n" +
+                        "ssh-keygen -E md5 -lf /etc/ssh/ssh_host_ed25519_key.pub",
                     style = MaterialTheme.typography.labelSmall,
                     fontFamily = FontFamily.Monospace,
                 )

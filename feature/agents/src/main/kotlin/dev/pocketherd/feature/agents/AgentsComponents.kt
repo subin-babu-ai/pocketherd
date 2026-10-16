@@ -333,6 +333,8 @@ fun AgentRow(
     titleWeight: FontWeight = FontWeight.Normal,
     /** New wraps to two lines; Working truncates to one. */
     titleLines: Int = 1,
+    /** Open beside the list in the two-pane layout. */
+    selected: Boolean = false,
     trailing: (@Composable () -> Unit)? = null,
     onClick: () -> Unit,
 ) {
@@ -340,9 +342,29 @@ fun AgentRow(
     val spokenAge = minutes?.let { formatAgeSpoken(it, entry.statusSinceExact) }.orEmpty()
     val meta = entry.rowMeta(showMachine)
 
+    // Setting a container colour without its matching content colour is how selected rows
+    // end up as dark text on a saturated fill.
+    val titleColor = if (selected) {
+        MaterialTheme.colorScheme.onSecondaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+    val metaColor = if (selected) {
+        MaterialTheme.colorScheme.onSecondaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
     Row(
         modifier
             .fillMaxWidth()
+            .then(
+                if (selected) {
+                    Modifier.background(MaterialTheme.colorScheme.secondaryContainer)
+                } else {
+                    Modifier
+                },
+            )
             .clickable(onClick = onClick)
             .heightIn(min = if (titleLines > 1) 64.dp else 56.dp)
             .padding(start = 20.dp, end = if (trailing != null) 4.dp else 20.dp, top = 6.dp, bottom = 6.dp)
@@ -360,6 +382,7 @@ fun AgentRow(
                 entry.pane.displayName,
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = titleWeight,
+                color = titleColor,
                 maxLines = titleLines,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -368,7 +391,7 @@ fun AgentRow(
                     meta,
                     modifier = Modifier.padding(top = 2.dp),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = metaColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -381,7 +404,7 @@ fun AgentRow(
                     fontFeatureSettings = "tnum",
                 ),
                 fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = metaColor,
             )
         }
         trailing?.invoke()

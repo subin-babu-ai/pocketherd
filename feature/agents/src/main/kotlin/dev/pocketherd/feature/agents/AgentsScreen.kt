@@ -186,13 +186,8 @@ private fun TriageList(
                         titleWeight = FontWeight.SemiBold,
                         titleLines = 2,
                         showMachine = state.machineFilter == null,
-                        modifier = Modifier.background(
-                            if (entry.key == selectedPaneKey) {
-                                MaterialTheme.colorScheme.secondaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.surface
-                            },
-                        ),
+                        selected = entry.key == selectedPaneKey,
+                        modifier = Modifier.background(MaterialTheme.colorScheme.surface),
                         trailing = {
                             IconButton(onClick = { viewModel.markSeen(entry) }) {
                                 Icon(
@@ -214,11 +209,7 @@ private fun TriageList(
                     entry = entry,
                     now = now,
                     showMachine = state.machineFilter == null,
-                    modifier = if (entry.key == selectedPaneKey) {
-                        Modifier.background(MaterialTheme.colorScheme.secondaryContainer)
-                    } else {
-                        Modifier
-                    },
+                    selected = entry.key == selectedPaneKey,
                     onClick = { onOpenPane(entry.machineId, entry.pane.paneId) },
                 )
             }

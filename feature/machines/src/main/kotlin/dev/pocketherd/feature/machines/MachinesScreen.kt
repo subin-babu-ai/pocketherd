@@ -129,6 +129,19 @@ fun MachinesScreen(
                     { viewModel.update(form.copy(socketPath = it)) },
                     "herdr socket (blank = ~/.config/herdr/herdr.sock)",
                 )
+                OutlinedTextField(
+                    value = form.fallbackHosts,
+                    onValueChange = { viewModel.update(form.copy(fallbackHosts = it)) },
+                    label = { Text("Other addresses, one per line") },
+                    supportingText = {
+                        Text(
+                            "Tried in order when the first fails, so one entry works on " +
+                                "any network. A tailnet address belongs here.",
+                        )
+                    },
+                    minLines = 2,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                )
 
                 // Only machines that are not the one being edited, and that do not
                 // themselves route through it, can serve as a jump host.
@@ -203,6 +216,15 @@ private fun MachineRow(
                 style = MaterialTheme.typography.bodySmall,
                 fontFamily = FontFamily.Monospace,
             )
+            // Which address is actually in use, when there is more than one to choose from.
+            machine.lastGoodHost?.takeIf { machine.fallbackHosts.isNotEmpty() }?.let {
+                Text(
+                    "via $it",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
             machine.socketPath?.let {
                 Text(
                     it,

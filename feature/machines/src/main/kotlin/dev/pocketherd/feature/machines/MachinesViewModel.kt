@@ -28,6 +28,8 @@ data class MachineForm(
     val socketPath: String = "",
     /** Machine id to tunnel through, or null for a direct connection. */
     val via: Long? = null,
+    /** One address per line, tried when the primary fails. */
+    val fallbackHosts: String = "",
 ) {
     val isEditing: Boolean get() = editingId != 0L
     val canSave: Boolean get() = host.isNotBlank() && username.isNotBlank()
@@ -41,6 +43,7 @@ data class MachineForm(
         socketPath = socketPath.trim().ifBlank { null },
         auth = AuthMethod.Keystore,
         via = via,
+        fallbackHosts = fallbackHosts.lines().map { it.trim() }.filter { it.isNotEmpty() },
     )
 
     companion object {
@@ -52,6 +55,7 @@ data class MachineForm(
             username = machine.username,
             socketPath = machine.socketPath.orEmpty(),
             via = machine.via,
+            fallbackHosts = machine.fallbackHosts.joinToString("\n"),
         )
     }
 }

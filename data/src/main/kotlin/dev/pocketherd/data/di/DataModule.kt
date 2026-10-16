@@ -10,7 +10,9 @@ import dev.pocketherd.core.ssh.KeystoreIdentity
 import dev.pocketherd.core.ssh.SshAuth
 import dev.pocketherd.core.ssh.SshConnection
 import dev.pocketherd.core.ssh.SshTransport
+import dev.pocketherd.core.ssh.HostKeyChangedException
 import dev.pocketherd.core.ssh.StoredHostKeyVerifier
+import dev.pocketherd.core.ssh.findCause
 import dev.pocketherd.data.HerdrClient
 import dev.pocketherd.data.HerdrRepositoryImpl
 import dev.pocketherd.data.MachineRepositoryImpl
@@ -74,7 +76,7 @@ class SshConnectorImpl @Inject constructor(
 
         val connection = SshConnection.connect(
             transport = transport,
-            host = machine.host,
+            host = machine.lastGoodHost ?: machine.host,
             socketPath = SshConnector.socketPathFor(machine),
             preferredRelay = row?.lastRelay,
         ) { channel ->
@@ -106,6 +108,37 @@ class SshConnectorImpl @Inject constructor(
             "Jump-host loop through ${machine.label}. A machine cannot be reached via itself."
         }
 
+        val row = dao.get(machine.id)
+        val verifier = StoredHostKeyVerifier(row?.hostKeyFingerprint)
+        val candidates = machine.candidateHosts()
+
+        // Try every address the machine is known by before reaching for the jump host, so
+        // one entry works on the office LAN, at home and over a tailnet without editing.
+        candidates.forEachIndexed { index, host ->
+            val last = index == candidates.lastIndex && machine.via == null
+            val attempt = runCatching {
+                SshConnection.openTransport(
+                    host = host,
+                    port = machine.port,
+                    username = machine.username,
+                    auth = authFor(machine),
+                    verifier = verifier,
+                    // Only the final candidate is worth a full wait. Spending 15s on each
+                    // of three dead addresses makes every reconnect feel broken.
+                    connectTimeoutMs = if (last) 15_000 else 6_000,
+                )
+            }
+            attempt.getOrNull()?.let { transport ->
+                if (host != machine.lastGoodHost) dao.rememberHost(machine.id, host)
+                Log.i("PocketHerd", "${machine.label}: connected via $host")
+                return transport
+            }
+            // A changed host key is a security decision, not a dead address; stop rather
+            // than quietly trying somewhere else.
+            attempt.exceptionOrNull()?.findCause<HostKeyChangedException>()?.let { throw it }
+            Log.w("PocketHerd", "${machine.label}: $host unreachable")
+        }
+
         val jump = machine.via?.let { viaId ->
             val viaMachine = dao.get(viaId)?.let { row ->
                 Machine(
@@ -122,16 +155,18 @@ class SshConnectorImpl @Inject constructor(
             } ?: error("${machine.label} is configured to connect via a machine that was deleted")
 
             openTransport(viaMachine, visited + machine.id)
-        }
+        } ?: error(
+            "${machine.label} is unreachable at ${candidates.joinToString(", ")} " +
+                "and has no jump host configured.",
+        )
 
-        val row = dao.get(machine.id)
+        // Direct failed; go through the hop. Its own host key is checked separately.
         return SshConnection.openTransport(
             host = machine.host,
             port = machine.port,
             username = machine.username,
             auth = authFor(machine),
-            // Each hop is verified against its own stored fingerprint.
-            verifier = StoredHostKeyVerifier(row?.hostKeyFingerprint),
+            verifier = verifier,
             via = jump,
         )
     }

@@ -26,6 +26,7 @@ class MachineRepositoryImplTest {
         }
         override suspend fun delete(id: Long) { row = null }
         override suspend fun rememberRelay(id: Long, relay: String) = Unit
+        override suspend fun rememberHost(id: Long, host: String) = Unit
         override suspend fun trustHostKey(id: Long, fingerprint: String) = Unit
     }
 
@@ -93,6 +94,34 @@ class MachineRepositoryImplTest {
         val dao = FakeDao(existing.copy(viaMachineId = 7))
         MachineRepositoryImpl(dao).upsert(machine().copy(via = null))
         assertNull(dao.saved?.viaMachineId)
+    }
+
+    @Test
+    fun `changing the host forgets which address worked`() = runTest {
+        // The remembered address belongs to the old endpoint and would be tried first.
+        val dao = FakeDao(existing.copy(lastGoodHost = "10.0.0.5"))
+        MachineRepositoryImpl(dao).upsert(machine(host = "10.0.0.99"))
+        assertNull(dao.saved?.lastGoodHost)
+    }
+
+    @Test
+    fun `renaming keeps the remembered address`() = runTest {
+        val dao = FakeDao(existing.copy(lastGoodHost = "10.0.0.5"))
+        MachineRepositoryImpl(dao).upsert(machine(label = "macbook"))
+        assertEquals("10.0.0.5", dao.saved?.lastGoodHost)
+    }
+
+    @Test
+    fun `fallback addresses survive a round trip`() = runTest {
+        val dao = FakeDao(existing)
+        MachineRepositoryImpl(dao).upsert(
+            machine().copy(fallbackHosts = listOf("100.64.0.5", "box.local")),
+        )
+        assertEquals("100.64.0.5\nbox.local", dao.saved?.fallbackHosts)
+        assertEquals(
+            listOf("100.64.0.5", "box.local"),
+            MachineRepositoryImpl(dao).get(1)?.fallbackHosts,
+        )
     }
 
     @Test

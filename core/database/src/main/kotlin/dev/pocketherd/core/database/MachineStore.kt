@@ -45,6 +45,9 @@ data class MachineEntity(
     val hostKeyFingerprint: String? = null,
     /** Id of the machine to tunnel through, or null for a direct connection. */
     val viaMachineId: Long? = null,
+    /** Newline-separated alternative addresses. */
+    val fallbackHosts: String? = null,
+    val lastGoodHost: String? = null,
 )
 
 @Dao
@@ -66,9 +69,12 @@ interface MachineDao {
 
     @Query("UPDATE machines SET hostKeyFingerprint = :fingerprint WHERE id = :id")
     suspend fun trustHostKey(id: Long, fingerprint: String)
+
+    @Query("UPDATE machines SET lastGoodHost = :host WHERE id = :id")
+    suspend fun rememberHost(id: Long, host: String)
 }
 
-@Database(entities = [MachineEntity::class], version = 2, exportSchema = false)
+@Database(entities = [MachineEntity::class], version = 3, exportSchema = false)
 abstract class PocketHerdDatabase : RoomDatabase() {
     abstract fun machineDao(): MachineDao
 }
@@ -88,11 +94,19 @@ object DatabaseModule {
         }
     }
 
+    /** Several addresses per machine, plus the one that worked last. */
+    private val MIGRATION_2_3 = object : Migration(2, 3) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE machines ADD COLUMN fallbackHosts TEXT")
+            db.execSQL("ALTER TABLE machines ADD COLUMN lastGoodHost TEXT")
+        }
+    }
+
     @Provides
     @Singleton
     fun database(@ApplicationContext context: Context): PocketHerdDatabase =
         Room.databaseBuilder(context, PocketHerdDatabase::class.java, "pocketherd.db")
-            .addMigrations(MIGRATION_1_2)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
             .build()
 
     @Provides

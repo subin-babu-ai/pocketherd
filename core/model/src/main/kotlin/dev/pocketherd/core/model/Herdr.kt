@@ -153,7 +153,29 @@ data class Machine(
      * something the phone can already get to.
      */
     val via: Long? = null,
-)
+    /**
+     * Other addresses for the same machine, tried in order when [host] fails.
+     *
+     * A laptop is a different address on the office LAN, at home, and over a tailnet. One
+     * entry per machine with a list of ways to reach it beats three entries that are the
+     * same machine, or editing the row every time the network changes.
+     */
+    val fallbackHosts: List<String> = emptyList(),
+    /** The address that worked last time. Tried first, so the common case costs nothing. */
+    val lastGoodHost: String? = null,
+) {
+    /**
+     * Addresses to try, best guess first and no duplicates.
+     *
+     * Ordering matters more than it looks: a wrong first guess costs a TCP timeout on
+     * every reconnect, and reconnects happen whenever the phone changes network.
+     */
+    fun candidateHosts(): List<String> =
+        (listOfNotNull(lastGoodHost) + host + fallbackHosts)
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+}
 
 enum class AuthMethod { Keystore, Password }
 

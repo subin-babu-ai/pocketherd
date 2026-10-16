@@ -51,6 +51,9 @@ class MachineRepositoryImpl @Inject constructor(
                 socketPath = machine.socketPath,
                 authMethod = machine.auth.name,
                 viaMachineId = machine.via,
+                fallbackHosts = machine.fallbackHosts.joinToString("\n").ifBlank { null },
+                // A new address list invalidates which one worked.
+                lastGoodHost = if (sameEndpoint) existing.lastGoodHost else null,
                 lastRelay = if (sameEndpoint) existing.lastRelay else null,
                 hostKeyFingerprint = if (sameEndpoint) existing.hostKeyFingerprint else null,
             ),
@@ -73,6 +76,9 @@ class MachineRepositoryImpl @Inject constructor(
         socketPath = row.socketPath,
         auth = runCatching { AuthMethod.valueOf(row.authMethod) }.getOrDefault(AuthMethod.Keystore),
         via = row.viaMachineId,
+        fallbackHosts = row.fallbackHosts?.lines()?.map { it.trim() }?.filter { it.isNotEmpty() }
+            ?: emptyList(),
+        lastGoodHost = row.lastGoodHost,
     )
 }
 

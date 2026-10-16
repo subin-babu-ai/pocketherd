@@ -30,7 +30,7 @@ private val Context.agentMemory by preferencesDataStore("agent_memory")
  */
 @Singleton
 class AgentMemoryStore @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
 ) {
 
     @Serializable

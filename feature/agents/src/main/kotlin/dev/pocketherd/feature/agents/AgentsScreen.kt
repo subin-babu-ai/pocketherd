@@ -81,6 +81,8 @@ internal val HH_MM = DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.system
 fun AgentsScreen(
     onOpenPane: (machineId: Long, paneId: String) -> Unit,
     onOpenMachines: () -> Unit,
+    /** "machineId:paneId" of the pane open beside the list, or null on a phone. */
+    selectedPaneKey: String? = null,
     viewModel: AgentsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -129,6 +131,7 @@ fun AgentsScreen(
                 now = now,
                 filtered = state.machineFilter != null || state.spaceFilter != null,
                 onOpen = { openAndMarkSeen(it.machineId, it.pane.paneId) },
+                selectedPaneKey = selectedPaneKey,
             )
         },
     ) { padding ->
@@ -145,7 +148,7 @@ fun AgentsScreen(
                     onShowInInbox = viewModel::showSpaceInInbox,
                 )
 
-                else -> TriageList(state, now, viewModel, openAndMarkSeen)
+                else -> TriageList(state, now, viewModel, openAndMarkSeen, selectedPaneKey)
             }
         }
     }
@@ -157,6 +160,7 @@ private fun TriageList(
     now: Instant,
     viewModel: AgentsViewModel,
     onOpenPane: (Long, String) -> Unit,
+    selectedPaneKey: String? = null,
 ) {
     var quietExpanded by remember { mutableStateOf(false) }
     var shellsExpanded by remember { mutableStateOf(false) }
@@ -182,7 +186,13 @@ private fun TriageList(
                         titleWeight = FontWeight.SemiBold,
                         titleLines = 2,
                         showMachine = state.machineFilter == null,
-                        modifier = Modifier.background(MaterialTheme.colorScheme.surface),
+                        modifier = Modifier.background(
+                            if (entry.key == selectedPaneKey) {
+                                MaterialTheme.colorScheme.secondaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.surface
+                            },
+                        ),
                         trailing = {
                             IconButton(onClick = { viewModel.markSeen(entry) }) {
                                 Icon(
@@ -204,6 +214,11 @@ private fun TriageList(
                     entry = entry,
                     now = now,
                     showMachine = state.machineFilter == null,
+                    modifier = if (entry.key == selectedPaneKey) {
+                        Modifier.background(MaterialTheme.colorScheme.secondaryContainer)
+                    } else {
+                        Modifier
+                    },
                     onClick = { onOpenPane(entry.machineId, entry.pane.paneId) },
                 )
             }

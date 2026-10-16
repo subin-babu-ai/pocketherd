@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.automirrored.filled.ViewSidebar
 import androidx.compose.material.icons.filled.ScheduleSend
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
@@ -68,9 +69,17 @@ import java.time.Instant
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PaneScreen(
+    machineId: Long,
+    paneId: String,
     onBack: () -> Unit,
     onOpenPane: (Long, String) -> Unit = { _, _ -> },
-    viewModel: PaneViewModel = hiltViewModel(),
+    /** Shown only in the two-pane layout, where the list can be hidden. */
+    onToggleList: (() -> Unit)? = null,
+    listHidden: Boolean = false,
+    viewModel: PaneViewModel = hiltViewModel<PaneViewModel, PaneViewModel.Factory>(
+        key = "pane-$machineId-$paneId",
+        creationCallback = { factory -> factory.create(machineId, paneId) },
+    ),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbars = remember { SnackbarHostState() }
@@ -94,7 +103,7 @@ fun PaneScreen(
     LaunchedEffect(state.text) { scroll.animateScrollTo(scroll.maxValue) }
 
     Scaffold(
-        topBar = { PaneHeader(state, onBack) },
+        topBar = { PaneHeader(state, onBack, onToggleList, listHidden) },
         snackbarHost = { SnackbarHost(snackbars) },
         bottomBar = { ReplySheet(state, viewModel, onOpenPane) },
     ) { padding ->
@@ -119,7 +128,12 @@ fun PaneScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PaneHeader(state: PaneUiState, onBack: () -> Unit) {
+private fun PaneHeader(
+    state: PaneUiState,
+    onBack: () -> Unit,
+    onToggleList: (() -> Unit)?,
+    listHidden: Boolean,
+) {
     Column {
         TopAppBar(
             title = {
@@ -132,8 +146,22 @@ private fun PaneHeader(state: PaneUiState, onBack: () -> Unit) {
                 )
             },
             navigationIcon = {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                // With the list beside it there is nothing to go back to, so the slot
+                // becomes the list toggle instead.
+                if (onToggleList == null) {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                }
+            },
+            actions = {
+                onToggleList?.let { toggle ->
+                    IconButton(onClick = toggle) {
+                        Icon(
+                            if (listHidden) Icons.AutoMirrored.Filled.ViewSidebar else Icons.AutoMirrored.Filled.ViewSidebar,
+                            contentDescription = if (listHidden) "Show list" else "Hide list",
+                        )
+                    }
                 }
             },
             colors = TopAppBarDefaults.topAppBarColors(

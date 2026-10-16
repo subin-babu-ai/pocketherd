@@ -1,8 +1,10 @@
 package dev.pocketherd.feature.pane
 
-import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedFactory
+import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.pocketherd.core.model.AgentEntry
 import dev.pocketherd.core.model.AgentStatus
@@ -18,7 +20,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.time.Instant
-import javax.inject.Inject
 
 /** What the reply sheet is showing. */
 sealed interface ReplyPhase {
@@ -60,15 +61,23 @@ data class PaneUiState(
  * this reads a composed screen and writes answers back. Everything here is built so nothing
  * implies character-level liveness the transport does not have.
  */
-@HiltViewModel
-class PaneViewModel @Inject constructor(
+@HiltViewModel(assistedFactory = PaneViewModel.Factory::class)
+class PaneViewModel @AssistedInject constructor(
+    @Assisted private val machineId: Long,
+    @Assisted private val paneId: String,
     private val herdr: HerdrRepository,
     observeAllAgents: ObserveAllAgentsUseCase,
-    savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
-    private val machineId: Long = checkNotNull(savedStateHandle["machineId"])
-    private val paneId: String = checkNotNull(savedStateHandle["paneId"])
+    /**
+     * Assisted rather than read from SavedStateHandle, because on a large screen the pane
+     * is rendered beside the list rather than as a navigation destination, so there is no
+     * back stack entry to carry its arguments.
+     */
+    @AssistedFactory
+    interface Factory {
+        fun create(machineId: Long, paneId: String): PaneViewModel
+    }
 
     private val _uiState = MutableStateFlow(PaneUiState())
     val uiState: StateFlow<PaneUiState> = _uiState.asStateFlow()

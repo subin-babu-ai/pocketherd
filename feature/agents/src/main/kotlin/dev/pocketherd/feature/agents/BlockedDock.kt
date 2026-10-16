@@ -1,6 +1,7 @@
 package dev.pocketherd.feature.agents
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.WindowInsets
@@ -64,6 +65,7 @@ fun BlockedDock(
     now: Instant,
     filtered: Boolean,
     onOpen: (AgentEntry) -> Unit,
+    selectedPaneKey: String? = null,
 ) {
     val blocked = groups.flatMap { it.agents }
     var expanded by remember { mutableStateOf(false) }
@@ -136,7 +138,9 @@ fun BlockedDock(
                     val rows = group.agents.take(budget)
                     budget -= rows.size
                     SpaceDockHeader(group)
-                    rows.forEach { entry -> DockRow(entry, now) { onOpen(entry) } }
+                    rows.forEach { entry ->
+                        DockRow(entry, now, entry.key == selectedPaneKey) { onOpen(entry) }
+                    }
                 }
             }
 
@@ -188,7 +192,12 @@ private fun SpaceDockHeader(group: AgentGroup) {
 }
 
 @Composable
-private fun DockRow(entry: AgentEntry, now: Instant, onOpen: () -> Unit) {
+private fun DockRow(
+    entry: AgentEntry,
+    now: Instant,
+    selected: Boolean = false,
+    onOpen: () -> Unit,
+) {
     val minutes = entry.ageMinutes(now)
     // The space is already in the group header above, so the row spends its line on what
     // the agent is asking and which tab it is in.
@@ -202,6 +211,19 @@ private fun DockRow(entry: AgentEntry, now: Instant, onOpen: () -> Unit) {
             .background(
                 MaterialTheme.colorScheme.errorContainer,
                 RoundedCornerShape(16.dp),
+            )
+            // An inset ring rather than a fill: a selected row is already on
+            // errorContainer, and recolouring it would lose the blocked signal.
+            .then(
+                if (selected) {
+                    Modifier.border(
+                        2.dp,
+                        MaterialTheme.colorScheme.onErrorContainer,
+                        RoundedCornerShape(16.dp),
+                    )
+                } else {
+                    Modifier
+                },
             )
             .clickable(onClick = onOpen)
             .heightIn(min = 72.dp)

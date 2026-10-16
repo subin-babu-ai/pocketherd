@@ -44,5 +44,7 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.navigation.compose)
+    implementation(libs.androidx.adaptive)
+    implementation(libs.androidx.adaptive.layout)
     implementation(libs.androidx.lifecycle.runtime.compose)
 }

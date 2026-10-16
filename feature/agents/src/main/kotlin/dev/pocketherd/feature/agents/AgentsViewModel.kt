@@ -127,8 +127,10 @@ class AgentsViewModel @Inject constructor(
         machineFilter.value = null
     }
 
-    fun markSeen(entry: AgentEntry) {
-        viewModelScope.launch { herdr.markSeen(entry.machineId, entry.pane.paneId) }
+    fun markSeen(entry: AgentEntry) = markSeen(entry.machineId, entry.pane.paneId)
+
+    fun markSeen(machineId: Long, paneId: String) {
+        viewModelScope.launch { herdr.markSeen(machineId, paneId) }
     }
 
     fun markAllSeen() {

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.TaskAlt
@@ -41,6 +43,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -495,4 +500,60 @@ fun AgentEntry.rowMeta(showMachine: Boolean = true): String = buildString {
     // The tab only earns its place when it was actually named; herdr defaults the label
     // to the tab number, which says nothing.
     tab?.meaningfulLabel?.let { append(" › $it") }
+}
+
+/**
+ * A New row that can also be swiped away to mark it seen.
+ *
+ * Swipe is the fast path and the trailing button is the discoverable one; the spec asks for
+ * both because neither works alone. Only end-to-start is enabled: a bidirectional swipe on
+ * a row whose only action is "seen" would just offer two ways to do the same thing while
+ * making an accidental drag twice as likely.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+// confirmValueChange is deprecated in favour of dynamic anchors, but the replacement is for
+// vetoing a settle. Here the swipe performs an action and the row deliberately stays put,
+// which is exactly what returning false expresses.
+@Suppress("DEPRECATION")
+@Composable
+fun SwipeToMarkSeen(
+    entry: AgentEntry,
+    onMarkSeen: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    val state = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            if (value == SwipeToDismissBoxValue.EndToStart) {
+                onMarkSeen()
+                // Never settle into the dismissed state: the row stays, it just stops
+                // being unread, and the list re-sorts it into Quiet on its own.
+                false
+            } else {
+                false
+            }
+        },
+    )
+
+    SwipeToDismissBox(
+        state = state,
+        enableDismissFromStartToEnd = false,
+        enableDismissFromEndToStart = true,
+        backgroundContent = {
+            Row(
+                Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                    .padding(end = 24.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Default.DoneAll,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        content = { content() },
+    )
 }

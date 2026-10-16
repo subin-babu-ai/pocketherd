@@ -41,6 +41,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -54,6 +55,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import android.os.SystemClock
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.pocketherd.core.model.AgentEntry
 import dev.pocketherd.core.model.AgentStatus
@@ -80,6 +85,8 @@ fun AgentsScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
+    RecordLookedAt(viewModel)
+
     // One clock for the whole screen. A timer per row would wake nineteen coroutines a
     // minute to move text that changes once an hour for most of them.
     val now by produceState(initialValue = Instant.now()) {
@@ -99,6 +106,11 @@ fun AgentsScreen(
         )
     }
 
+    val openAndMarkSeen: (Long, String) -> Unit = { machineId, paneId ->
+        viewModel.markSeen(machineId, paneId)
+        onOpenPane(machineId, paneId)
+    }
+
     Scaffold(
         topBar = {
             SummaryHeader(
@@ -116,7 +128,7 @@ fun AgentsScreen(
                 groups = state.dock,
                 now = now,
                 filtered = state.machineFilter != null || state.spaceFilter != null,
-                onOpen = { onOpenPane(it.machineId, it.pane.paneId) },
+                onOpen = { openAndMarkSeen(it.machineId, it.pane.paneId) },
             )
         },
     ) { padding ->
@@ -129,11 +141,11 @@ fun AgentsScreen(
                 state.view == ListView.Spaces -> SpacesView(
                     spaces = state.spaces,
                     now = now,
-                    onOpenPane = onOpenPane,
+                    onOpenPane = openAndMarkSeen,
                     onShowInInbox = viewModel::showSpaceInInbox,
                 )
 
-                else -> TriageList(state, now, viewModel, onOpenPane)
+                else -> TriageList(state, now, viewModel, openAndMarkSeen)
             }
         }
     }
@@ -163,22 +175,25 @@ private fun TriageList(
                 )
             }
             items(triage.new, key = { it.key }) { entry ->
-                AgentRow(
-                    entry = entry,
-                    now = now,
-                    titleWeight = FontWeight.SemiBold,
-                    titleLines = 2,
-                    showMachine = state.machineFilter == null,
-                    trailing = {
-                        IconButton(onClick = { viewModel.markSeen(entry) }) {
-                            Icon(
-                                Icons.Default.DoneAll,
-                                contentDescription = "Mark ${entry.pane.displayName} seen",
-                            )
-                        }
-                    },
-                    onClick = { onOpenPane(entry.machineId, entry.pane.paneId) },
-                )
+                SwipeToMarkSeen(entry, onMarkSeen = { viewModel.markSeen(entry) }) {
+                    AgentRow(
+                        entry = entry,
+                        now = now,
+                        titleWeight = FontWeight.SemiBold,
+                        titleLines = 2,
+                        showMachine = state.machineFilter == null,
+                        modifier = Modifier.background(MaterialTheme.colorScheme.surface),
+                        trailing = {
+                            IconButton(onClick = { viewModel.markSeen(entry) }) {
+                                Icon(
+                                    Icons.Default.DoneAll,
+                                    contentDescription = "Mark ${entry.pane.displayName} seen",
+                                )
+                            }
+                        },
+                        onClick = { onOpenPane(entry.machineId, entry.pane.paneId) },
+                    )
+                }
             }
         }
 
@@ -248,3 +263,32 @@ private fun TriageList(
         }
     }
 }
+
+/**
+ * Marks "you have looked at the list" when it leaves the screen.
+ *
+ * Recorded on stop rather than start, so the summary the user came back for survives the
+ * visit that is reading it. The two-second floor keeps a rotation, a notification-shade
+ * pull, or an accidental launch from wiping a genuinely useful "since 13:10".
+ */
+@Composable
+private fun RecordLookedAt(viewModel: AgentsViewModel) {
+    val owner = LocalLifecycleOwner.current
+    DisposableEffect(owner) {
+        var visibleSince = 0L
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START -> visibleSince = SystemClock.elapsedRealtime()
+                Lifecycle.Event.ON_STOP -> {
+                    val shown = SystemClock.elapsedRealtime() - visibleSince
+                    if (visibleSince > 0L && shown >= MIN_LOOK_MS) viewModel.recordLookedAt()
+                }
+                else -> Unit
+            }
+        }
+        owner.lifecycle.addObserver(observer)
+        onDispose { owner.lifecycle.removeObserver(observer) }
+    }
+}
+
+private const val MIN_LOOK_MS = 2_000L

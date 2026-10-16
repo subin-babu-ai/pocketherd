@@ -2,6 +2,8 @@ package dev.pocketherd.feature.agents
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,6 +20,7 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.PanTool
+import androidx.compose.material.icons.outlined.Bedtime
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.material.icons.outlined.Workspaces
@@ -130,7 +133,6 @@ private fun SpaceCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    CountChips(group)
                 }
                 Icon(
                     if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
@@ -138,6 +140,15 @@ private fun SpaceCard(
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+
+            // Outside the header row: keeping them inside pushed the icon and chevron
+            // down to the centre of the whole stack instead of the title line.
+            CountChips(
+                group,
+                Modifier
+                    .clickable(onClick = onToggle)
+                    .padding(start = 46.dp, end = 14.dp, bottom = 10.dp),
+            )
 
             if (expanded) {
                 group.tabs.forEach { tabGroup ->
@@ -172,7 +183,7 @@ private fun SpaceCard(
 
 /** Only non-zero counts, so a quiet space stays visually quiet. */
 @Composable
-private fun CountChips(group: AgentGroup) {
+private fun CountChips(group: AgentGroup, modifier: Modifier = Modifier) {
     val chips = buildList {
         if (group.blocked > 0) {
             add(Triple(Icons.Filled.PanTool, "${group.blocked} blocked", true))
@@ -183,6 +194,9 @@ private fun CountChips(group: AgentGroup) {
         if (group.working > 0) {
             add(Triple(Icons.Rounded.Autorenew, "${group.working} working", false))
         }
+        if (group.quiet > 0) {
+            add(Triple(Icons.Outlined.Bedtime, "${group.quiet} quiet", false))
+        }
         if (group.shells > 0) {
             add(Triple(Icons.Outlined.Terminal, "${group.shells} shell", false))
         }
@@ -190,7 +204,7 @@ private fun CountChips(group: AgentGroup) {
     if (chips.isEmpty()) return
 
     Row(
-        Modifier.padding(top = 6.dp),
+        modifier.horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         chips.forEach { (icon, label, urgent) ->
